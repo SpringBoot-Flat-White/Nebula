@@ -1,6 +1,7 @@
 package com.nebula.nebulaCloud.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.nebula.nebulaCloud.model.UserType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,6 +26,21 @@ public class AuthenticationResponse {
      */
     @JsonProperty("access_token")
     private String token;
+
+    /**
+     * The email address of the authenticated user.
+     */
+    private String email;
+
+    /**
+     * The full name of the authenticated user.
+     */
+    private String fullName;
+
+    /**
+     * The type of the user account (e.g., INDIVIDUAL, COMPANY).
+     */
+    private UserType userType;
 
 
 }

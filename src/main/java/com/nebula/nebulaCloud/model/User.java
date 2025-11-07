@@ -10,23 +10,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Objects;
 
 /**
- * Represents a user entity in the database.
- *
- * This class serves a dual purpose:
- * 1. As a JPA entity to map the 'users' table from the database.
- * 2. As an implementation of Spring Security's UserDetails interface,
- *    making it the core user representation for authentication and authorization.
- *
- * Best Practice: Avoid using Lombok's @Data annotation on JPA entities
- * as it can cause issues with performance and entity lifecycle due to its
- * generation of `equals()`, `hashCode()`, and `toString()` methods.
- * It's better to be explicit with the needed annotations.
+ * Represents a user account in the system.
+ * This entity is mapped to the 'users' table and is used by Spring Security for authentication.
+ * It implements UserDetails to integrate with Spring Security's framework.
  */
-@Getter
 @Setter
+@Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -34,146 +25,79 @@ import java.util.Objects;
 @Table(name = "users")
 public class User implements UserDetails {
 
-    /**
-     * The unique identifier for the user. Generated automatically.
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * The user's email address. It must be unique and is used as the
-     * username for Spring Security authentication.
-     */
     @Column(nullable = false, unique = true, length = 120)
     private String email;
 
-    /**
-     * The user's hashed password. The field name in the database is 'password_hash'.
-     */
     @Column(name = "password_hash", nullable = false)
     private String password;
 
-    /**
-     * The type of the user account (e.g., INDIVIDUAL, ORGANIZATION).
-     * Stored as a string in the database for clarity.
-     */
     @Enumerated(EnumType.STRING)
-    @Column(name = "user_type")
+    @Column(name = "user_type", nullable = false)
     private UserType userType;
 
-    /**
-     * The timestamp when the user account was created. Managed automatically by JPA.
-     */
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    /**
-     * The timestamp when the user account was last updated. Managed automatically by JPA.
-     */
     @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    /**
-     * The ID of the plan associated with the user.
-     * Note: This is mapped as a simple Long. If a 'Plan' entity is created,
-     * this should be replaced with a @ManyToOne relationship.
-     */
-    @Column(name = "plan_id")
-    private Long planId;
-
-
-    // --- UserDetails Interface Implementation ---
+//    /**
+//     * Defines a many-to-one relationship with the Plan entity.
+//     * A user can have one subscribed plan, but a plan can have many users.
+//     */
+//    @ManyToOne(fetch = FetchType.LAZY)
+//    @JoinColumn(name = "plan_id")
+//    private Plan plan;
 
     /**
-     * Returns the authorities granted to the user. For this basic setup, we are not
-     * managing roles, so it returns an empty collection.
-     *
-     * @return A collection of granted authorities.
+     * Defines the inverse side of the one-to-one relationship with Individual.
+     * 'mappedBy = "user"' tells Hibernate that the relationship is managed by the 'user' field
+     * in the Individual entity. This is crucial for a correct bidirectional mapping.
+     * CascadeType.ALL means operations (save, delete) on a User will propagate to the associated Individual.
      */
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private Individual individual;
+
+
+    // --- Métodos de UserDetails ---
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // In a real application, you would map user roles to SimpleGrantedAuthority objects here.
-        // e.g., return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        // Puedes implementar roles aquí si los necesitas. Por ahora, devolvemos una lista vacía.
         return Collections.emptyList();
     }
 
-    /**
-     * Returns the username used to authenticate the user. In this application,
-     * the email is used as the username.
-     *
-     * @return The user's email.
-     */
     @Override
     public String getUsername() {
+        // Usamos el email como el nombre de usuario para Spring Security.
         return this.email;
     }
 
-    /**
-     * Indicates whether the user's account has expired. An expired account cannot be
-     * authenticated. For this implementation, accounts never expire.
-     *
-     * @return true always.
-     */
     @Override
     public boolean isAccountNonExpired() {
         return true;
     }
 
-    /**
-     * Indicates whether the user is locked or unlocked. A locked user cannot be
-     * authenticated. For this implementation, accounts are never locked.
-     *
-     * @return true always.
-     */
     @Override
     public boolean isAccountNonLocked() {
         return true;
     }
 
-    /**
-     * Indicates whether the user's credentials (password) has expired. Expired
-     * credentials prevent authentication. For this implementation, credentials never expire.
-     *
-     * @return true always.
-     */
+
+
     @Override
     public boolean isCredentialsNonExpired() {
         return true;
     }
 
-    /**
-     * Indicates whether the user is enabled or disabled. A disabled user cannot be
-     * authenticated. For this implementation, users are always enabled.
-     *
-     * @return true always.
-     */
     @Override
     public boolean isEnabled() {
         return true;
-    }
-
-    // --- Safe equals() and hashCode() Implementation ---
-
-    /**
-     * Professional practice for JPA entities: `equals()` and `hashCode()` should be
-     * based on the business key or the primary key, and should be consistent across
-     * all entity lifecycle states (transient, managed, detached).
-     */
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        User user = (User) o;
-        return id != null && Objects.equals(id, user.id);
-    }
-
-    @Override
-    public int hashCode() {
-        // Use a constant value for transient entities, or the class hashcode.
-        // This avoids issues when an entity is added to a Set before it's persisted.
-        return getClass().hashCode();
     }
 }

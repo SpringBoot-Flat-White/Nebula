@@ -48,4 +48,12 @@ public class RegisterRequest {
      * The optional ID of the plan to which the user is subscribing upon registration.
      */
     private Long planId;
+
+    /**
+     * The full name of the user.
+     * This field is mandatory.
+     */
+    @NotBlank
+    @Size(max = 255, message = "Full name must not exceed 255 characters.")
+    private String fullName;
 }
