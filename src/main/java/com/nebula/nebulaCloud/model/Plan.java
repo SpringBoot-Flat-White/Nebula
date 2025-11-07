@@ -3,6 +3,8 @@ package com.nebula.nebulaCloud.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "plans")
 @Data
@@ -22,7 +24,7 @@ public class Plan {
     private Integer maxInstances;
 
     @Column(precision = 10, scale = 2)
-    private Double price;
+    private BigDecimal price;
 
     @Column(name = "is_free")
     private Boolean isFree;

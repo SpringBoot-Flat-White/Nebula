@@ -2,6 +2,8 @@ package com.nebula.nebulaCloud.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -35,7 +37,7 @@ public class Payment {
     private String transactionId;
 
     @Column(precision = 10, scale = 2)
-    private Double amount;
+    private BigDecimal amount;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
