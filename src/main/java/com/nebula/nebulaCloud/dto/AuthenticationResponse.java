@@ -17,16 +17,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class AuthenticationResponse {
-
-    /**
-     * The JSON Web Token (JWT) used for authenticating subsequent requests.
-     * The @JsonProperty annotation allows customizing the JSON field name.
-     * Here we ensure it's sent as "access_token" in the JSON response,
-     * following standard OAuth/OIDC naming conventions.
-     */
-    @JsonProperty("access_token")
-    private String token;
-
     /**
      * The email address of the authenticated user.
      */
