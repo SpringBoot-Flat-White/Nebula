@@ -3,13 +3,19 @@ package com.nebula.nebulaCloud.service;
 import com.nebula.nebulaCloud.dto.AuthenticationRequest;
 import com.nebula.nebulaCloud.dto.AuthenticationResponse;
 import com.nebula.nebulaCloud.dto.RegisterRequest;
+import com.nebula.nebulaCloud.model.Individual;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Service layer responsible for handling the business logic of user authentication and registration.
@@ -25,62 +31,97 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    // IndividualRepository no es necesario aquí si se usa Cascade.ALL
 
     /**
-     * Registers a new user in the system.
+     * Registers a new user in the system and authenticates them.
      *
-     * This method performs the following steps:
-     * 1. Validates that the email is not already in use.
-     * 2. Hashes the user's plain-text password for secure storage.
-     * 3. Creates and saves the new User entity to the database.
-     * 4. Generates a JWT for the newly created user, effectively logging them in.
+     * <p>This method performs the following steps:</p>
+     * <ol>
+     *     <li>Validates that the email is not already in use.</li>
+     *     <li>Hashes the user's password for secure storage.</li>
+     *     <li>Creates and saves the new User and its associated Individual entity in a single transaction.</li>
+     *     <li>Generates a JWT for the newly created user.</li>
+     *     <li>Sets the JWT in a secure, HttpOnly cookie for session management.</li>
+     * </ol>
      *
      * @param request The registration request DTO containing the user's details.
-     * @return An AuthenticationResponse containing a valid JWT for the new user.
+     * @return A {@link ResponseEntity} with user details in the body and a 'Set-Cookie' header containing the auth token.
      * @throws IllegalStateException if a user with the provided email already exists.
      */
-    public AuthenticationResponse register(RegisterRequest request) {
+    @Transactional
+    public ResponseEntity<AuthenticationResponse> register(RegisterRequest request) {
         // Check if user already exists
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+        userRepository.findByEmail(request.getEmail()).ifPresent(u -> {
             throw new IllegalStateException("User with email " + request.getEmail() + " already exists.");
-        }
+        });
 
-        // Create a new user entity from the request
+        // 1. Create a new user entity from the request
         User user = User.builder()
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword())) // Hash the password
+                .password(passwordEncoder.encode(request.getPassword()))
                 .userType(request.getUserType())
-                .planId(request.getPlanId())
                 .build();
 
-        // Save the new user to the database
+        // 2. Create the associated Individual entity
+        Individual individual = Individual.builder()
+                .fullName(request.getFullName())
+                .user(user) // Link Individual to User
+                .build();
+
+        // 3. Complete the bidirectional link
+        user.setIndividual(individual);
+
+        // 4. Save the user. Due to CascadeType.ALL, the individual will be saved automatically.
         userRepository.save(user);
 
-        // Generate a JWT for the new user
+        // 5. Generate a JWT for the new user
         String jwtToken = jwtService.generateToken(user);
 
-        // Return the response containing the token
-        return AuthenticationResponse.builder()
-                .token(jwtToken)
+        // 6. Create a secure, HttpOnly cookie to store the JWT.
+        ResponseCookie jwtCookie = ResponseCookie.from("access_token", jwtToken)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(24 * 60 * 60) // 24 hours
                 .build();
+
+        // 7. Build the response body DTO with user details (without the token)
+        AuthenticationResponse responseBody = AuthenticationResponse.builder()
+                .email(user.getEmail())
+                .fullName(individual.getFullName())
+                .userType(user.getUserType())
+                .build();
+
+        // 8. Return the response with the cookie in the header and user details in the body
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+                .body(responseBody);
     }
 
     /**
-     * Authenticates an existing user.
+     * Authenticates an existing user based on their credentials and returns their details.
      *
-     * This method performs the following steps:
-     * 1. Delegates the authentication process to Spring's AuthenticationManager,
-     *    which will use our configured AuthenticationProvider to validate the credentials.
-     * 2. If authentication is successful, it fetches the user details.
-     * 3. Generates a new JWT for the authenticated user.
+     * <p>This method orchestrates the authentication process by performing the following steps:</p>
+     * <ol>
+     *     <li>Delegates credential validation (email and password) to Spring Security's {@link AuthenticationManager}.</li>
+     *     <li>If authentication is successful, it fetches the complete {@link User} entity from the database.</li>
+     *     <li>Generates a JSON Web Token (JWT) for the authenticated user to manage their session.</li>
+     *     <li>Embeds the generated JWT into a secure, <strong>HttpOnly</strong> cookie. This cookie is automatically handled by the browser
+     *     and is not accessible to client-side scripts, mitigating the risk of XSS attacks.</li>
+     *     <li>Constructs and returns a response body containing non-sensitive user details (email, full name, user type).</li>
+     * </ol>
      *
-     * @param request The authentication request DTO containing the user's email and password.
-     * @return An AuthenticationResponse containing a valid JWT for the session.
-     * @throws org.springframework.security.core.AuthenticationException if credentials are invalid.
+     * @param request The {@link AuthenticationRequest} DTO containing the user's email and password.
+     * @return A {@link ResponseEntity} where the body contains an {@link AuthenticationResponse} with user details,
+     *         and a 'Set-Cookie' header contains the JWT as a secure, HttpOnly cookie. The token itself is excluded from the response body.
+     * @throws AuthenticationException if the credentials provided in the request are invalid.
+     * @throws IllegalStateException if the user is successfully authenticated but cannot be found in the repository,
+     *         which indicates a potential data consistency issue.
      */
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // The AuthenticationManager will handle the verification of credentials.
-        // If the credentials are incorrect, it will throw an AuthenticationException.
+    @Transactional(readOnly = true)
+    public ResponseEntity<AuthenticationResponse> authenticate(AuthenticationRequest request) {
+        // 1. The AuthenticationManager will handle the verification of credentials.
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
@@ -88,16 +129,61 @@ public class AuthenticationService {
                 )
         );
 
-        // If authentication was successful, find the user to generate a token
+        // 2. If successful, find the user to generate a token and response.
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalStateException("User not found after authentication.")); // Should not happen
+                .orElseThrow(() -> new IllegalStateException("User not found after successful authentication."));
 
-        // Generate a JWT for the authenticated user
+        // 3. Get the full name from the associated Individual entity.
+        String fullName = (user.getIndividual() != null) ? user.getIndividual().getFullName() : "";
+
+        // 4. Generate a JWT for the authenticated user.
         String jwtToken = jwtService.generateToken(user);
 
-        // Return the response containing the token
-        return AuthenticationResponse.builder()
-                .token(jwtToken)
+        // 5. Create a secure, HttpOnly cookie to store the JWT.
+        ResponseCookie jwtCookie = ResponseCookie.from("access_token", jwtToken) // Key-value pair
+                .httpOnly(true)                                         // Prevents access from JavaScript (XSS protection)
+                .secure(true)                                           // Ensures the cookie is sent only over HTTPS
+                .path("/")                                              // The cookie is available for all paths in the domain
+                .maxAge(24 * 60 * 60)                                   // Sets cookie expiration (e.g., 24 hours in seconds)
                 .build();
+
+        // 6. Build the response body DTO with user details, excluding the token.
+        AuthenticationResponse responseBody = AuthenticationResponse.builder()
+                .email(user.getEmail())
+                .fullName(fullName)
+                .userType(user.getUserType())
+                .build();
+
+        // 7. Return the final ResponseEntity, adding the cookie to the headers and the DTO to the body.
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+                .body(responseBody);
     }
+
+    /**
+     * Logs out the current user by clearing the authentication cookie.
+     *
+     * <p>This method creates a new {@link ResponseCookie} with the same name ('access_token')
+     * as the authentication cookie, but with a max age of 0. When sent to the browser,
+     * this instruction effectively overwrites and deletes the existing cookie,
+     * terminating the user's session from the client's perspective.</p>
+     *
+     * @return A {@link ResponseEntity} with a 'Set-Cookie' header that clears the
+     *         authentication token and a success message in the body.
+     */
+    public ResponseEntity<String> logout() {
+        // Create a cookie with the same name, but with Max-Age = 0 to invalidate it
+        ResponseCookie cookie = ResponseCookie.from("access_token", "") // Value can be empty
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(0)
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .body("Logout successful!");
+    }
+
+
 }

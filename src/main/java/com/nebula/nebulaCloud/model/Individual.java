@@ -4,36 +4,34 @@ import jakarta.persistence.*;
 import lombok.*;
 
 /**
- * Represents an individual user profile linked to a base User entity.
- *
- * Stores personal details specific to individual accounts.
+ * Represents an individual user's profile information.
+ * This entity is mapped to the 'individuals' table and holds the user's full name.
+ * It has a one-to-one relationship with the User entity.
  */
-@Entity
-@Table(name = "individuals")
-@Data
+
+@Getter
+@Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@Entity
+@Table(name = "individuals")
 public class Individual {
 
-    /**
-     * Unique identifier for the individual (auto-generated).
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Full name of the individual.
-     */
     @Column(name = "full_name", length = 120)
     private String fullName;
 
     /**
-     * Associated user account.
-     * Defines a one-to-one relationship with the User entity.
+     * This defines the owning side of the one-to-one relationship with the User.
+     * The 'user_id' column in this table will hold the foreign key.
+     * fetch = FetchType.LAZY means the User object is loaded only when accessed.
+     * optional = false ensures that an Individual must be associated with a User.
      */
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 }
