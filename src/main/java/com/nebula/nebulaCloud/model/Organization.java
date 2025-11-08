@@ -35,9 +35,13 @@ public class Organization {
      * The owner of the organization.
      * Mapped to an individual user.
      */
-    @ManyToOne
+    @OneToOne
     @JoinColumn(name = "owner_id", nullable = false)
     private Individual owner;
+
+    @OneToOne
+    @JoinColumn(name = "user_id", nullable = false )
+    private  User user;
 
     /**
      * Timestamp when the organization was created.
