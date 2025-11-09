@@ -4,18 +4,13 @@ import jakarta.persistence.*;
 import lombok.*;
 
 /**
- * Represents an individual user's profile information.
- * This entity is mapped to the 'individuals' table and holds the user's full name.
- * It has a one-to-one relationship with the User entity.
  */
-
-@Getter
-@Setter
+@Entity
+@Data
+@Table(name = "individuals")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Table(name = "individuals")
 public class Individual {
 
     @Id
@@ -26,12 +21,11 @@ public class Individual {
     private String fullName;
 
     /**
-     * This defines the owning side of the one-to-one relationship with the User.
-     * The 'user_id' column in this table will hold the foreign key.
-     * fetch = FetchType.LAZY means the User object is loaded only when accessed.
-     * optional = false ensures that an Individual must be associated with a User.
      */
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    @OneToOne
+    @JoinColumn(name = "user_id")
     private User user;
+
+    @OneToOne(mappedBy = "owner", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private Organization organization;
 }

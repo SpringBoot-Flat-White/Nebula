@@ -12,7 +12,6 @@ public class IndividualResponse {
 
     private Long id;
     private String fullName;
-    private Long ownerId;
     private Long userId;
 
 }
