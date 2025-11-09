@@ -3,6 +3,7 @@ package com.nebula.nebulaCloud.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -46,7 +47,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Define public endpoints that do not require authentication.
                         // It is a common practice to make auth-related endpoints (login, register) public.
-                        .requestMatchers("/api/v1/auth/**","/api/organizations","/api/individuals").permitAll()
+                        .requestMatchers("/api/v1/auth/**","/api/organizations/**","/api/individuals/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
