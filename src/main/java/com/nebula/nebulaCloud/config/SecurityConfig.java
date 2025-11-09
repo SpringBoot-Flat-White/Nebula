@@ -47,7 +47,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Define public endpoints that do not require authentication.
                         // It is a common practice to make auth-related endpoints (login, register) public.
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**","/api/organizations/**","/api/individuals/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
