@@ -22,6 +22,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +35,66 @@ public class InstanceService {
     private final EngineConfig engineConfig;
     private final ContainerRepository containerRepository;
     private final UserDbRepository userDbRepository;
+
+    public ResponseEntity<List<InstanceResponse>> getAllByUserId(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<Instance> instances = instanceRepository.findByUser(user);
+
+        List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
+                .id(instance.getId())
+                .databaseName(instance.getDatabaseName())
+                .name(instance.getName())
+                .engineName(instance.getContainer().getEngine().getName())
+                .userId(instance.getUser().getId())
+                .containerId(instance.getContainer().getId())
+                .createdAt(instance.getCreatedAt())
+                .build()).toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    public ResponseEntity<List<InstanceResponse>> getAllByEngineId(Long userId, Long engineId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Engine engine = engineRepository.findById(engineId)
+                .orElseThrow(() -> new RuntimeException("Engine not found"));
+
+        Container container = containerRepository.findByEngine(engine)
+            .orElseThrow(() -> new RuntimeException("Container not found"));
+
+        List<Instance> instances = instanceRepository.findByContainerAndUser(container, user);
+
+        List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
+                .id(instance.getId())
+                .databaseName(instance.getDatabaseName())
+                .name(instance.getName())
+                .engineName(instance.getContainer().getEngine().getName())
+                .userId(instance.getUser().getId())
+                .containerId(instance.getContainer().getId())
+                .createdAt(instance.getCreatedAt())
+                .build()).toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    public ResponseEntity<List<InstanceResponse>> getAll() {
+
+        List<Instance> instances = instanceRepository.findAll();
+
+        List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
+                .id(instance.getId())
+                .databaseName(instance.getDatabaseName())
+                .name(instance.getName())
+                .engineName(instance.getContainer().getEngine().getName())
+                .userId(instance.getUser().getId())
+                .containerId(instance.getContainer().getId())
+                .createdAt(instance.getCreatedAt())
+                .build()).toList();
+        return ResponseEntity.ok(responses);
+    }
 
     @Transactional
     public ResponseEntity<InstanceResponse> create(InstanceRequest request) {

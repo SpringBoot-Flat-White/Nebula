@@ -1,5 +1,6 @@
 package com.nebula.nebulaCloud.repository;
 
+import com.nebula.nebulaCloud.model.Container;
 import com.nebula.nebulaCloud.model.Instance;
 import com.nebula.nebulaCloud.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,6 +21,10 @@ public interface InstanceRepository extends JpaRepository<Instance, Long> {
      * Find all instances belonging to a specific user.
      */
     List<Instance> findByUserOrderByCreatedAtDesc(User user);
+
+    List<Instance> findByUser(User user);
+
+    List<Instance> findByContainerAndUser(Container container, User user);
 
     /**
      * Find instance by ID and user (for security).
