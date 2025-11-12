@@ -34,3 +34,6 @@ build/
 
 !**/src/main/**/application.properties
 
+MERCADO_PAGO_REAL_TESTING.md
+src/main/resources/application.properties
+src/main/resources/application.properties

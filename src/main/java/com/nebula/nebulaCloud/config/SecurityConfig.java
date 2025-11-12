@@ -48,6 +48,10 @@ public class SecurityConfig {
                         // Define public endpoints that do not require authentication.
                         // It is a common practice to make auth-related endpoints (login, register) public.
                         .requestMatchers("/api/v1/auth/**","/api/organizations/**","/api/individuals/**", "/v3/api-docs/**", "/swagger-ui/**","/swagger-ui.html").permitAll()
+                        // Mercado Pago webhook endpoint (public for notifications)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
+                        // Mercado Pago return URLs (public for redirection)
+                        .requestMatchers("/api/v1/payments/success", "/api/v1/payments/failure", "/api/v1/payments/pending").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
