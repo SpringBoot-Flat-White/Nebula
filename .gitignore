@@ -32,7 +32,8 @@ build/
 ### VS Code ###
 .vscode/
 
-!**/src/main/**/application.properties
+### Application Properties (contains sensitive OAuth2 credentials) ###
+src/main/resources/application.properties
 
 MERCADO_PAGO_REAL_TESTING.md
 src/main/resources/application.properties

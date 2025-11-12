@@ -26,6 +26,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
+    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
+    private final com.nebula.nebulaCloud.service.OAuth2UserService oAuth2UserService;
 
     /**
      * Defines the security filter chain that applies to all HTTP requests.
@@ -48,6 +51,7 @@ public class SecurityConfig {
                         // Define public endpoints that do not require authentication.
                         // It is a common practice to make auth-related endpoints (login, register) public.
                         .requestMatchers("/api/v1/auth/**","/api/organizations/**","/api/individuals/**", "/v3/api-docs/**", "/swagger-ui/**","/swagger-ui.html").permitAll()
+                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // Mercado Pago webhook endpoint (public for notifications)
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
                         // Mercado Pago return URLs (public for redirection)
@@ -55,6 +59,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
+                )
+
+                // 2.5. Configure OAuth2 login
+                .oauth2Login(oauth2 -> oauth2
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(oAuth2UserService)
+                        )
+                        .successHandler(oAuth2AuthenticationSuccessHandler)
+                        .failureHandler(oAuth2AuthenticationFailureHandler)
                 )
 
                 // 3. Configure session management to be stateless.
