@@ -32,12 +32,33 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true, length = 120)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash", nullable = true)
     private String password;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false)
     private UserType userType;
+
+    /**
+     * OAuth2 provider (e.g., "google", "github", "local" for traditional login)
+     */
+    @Column(name = "provider", length = 20)
+    private String provider;
+
+    /**
+     * OAuth2 provider's user ID (e.g., Google ID, GitHub ID)
+     */
+    @Column(name = "provider_id")
+    private String providerId;
+
+    /**
+     * Indicates if the user has completed their profile after OAuth2 registration.
+     * This is used to prompt users to add their real name and other details
+     * after first-time OAuth2 login (since OAuth2 providers may give incomplete data).
+     */
+    @Column(name = "profile_completed", nullable = false)
+    @Builder.Default
+    private Boolean profileCompleted = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
