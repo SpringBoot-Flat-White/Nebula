@@ -2,11 +2,14 @@ package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.dto.AuthenticationRequest;
 import com.nebula.nebulaCloud.dto.AuthenticationResponse;
+import com.nebula.nebulaCloud.dto.CompleteProfileRequest;
+import com.nebula.nebulaCloud.dto.CompleteProfileResponse;
 import com.nebula.nebulaCloud.dto.RegisterRequest;
 import com.nebula.nebulaCloud.model.Individual;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
  * This service orchestrates the interaction between the user repository, the password encoder,
  * the JWT service, and Spring's AuthenticationManager to provide secure auth endpoints.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthenticationService {
@@ -61,6 +65,8 @@ public class AuthenticationService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .userType(request.getUserType())
+                .provider("local") // Traditional registration
+                .profileCompleted(true) // Profile is complete on traditional registration
                 .build();
 
         // 2. Create the associated Individual entity
@@ -183,6 +189,61 @@ public class AuthenticationService {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body("Logout successful!");
+    }
+
+    /**
+     * Completes the user profile after OAuth2 registration.
+     *
+     * This method is called when a user logs in via OAuth2 for the first time
+     * and needs to provide their real information (full name, etc.).
+     *
+     * This should only be called once per OAuth2 user.
+     *
+     * @param email The email of the user completing their profile
+     * @param request The profile completion request with user's real data
+     * @return A {@link ResponseEntity} with the updated user information
+     */
+    @Transactional
+    public ResponseEntity<CompleteProfileResponse> completeProfile(String email, CompleteProfileRequest request) {
+        // Find the user by email
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        // Verify that profile is not already completed
+        if (Boolean.TRUE.equals(user.getProfileCompleted())) {
+            throw new IllegalStateException("Profile already completed");
+        }
+
+        // Update Individual with real name
+        Individual individual = user.getIndividual();
+        if (individual != null) {
+            individual.setFullName(request.getFullName());
+        } else {
+            // Create Individual if it doesn't exist (edge case)
+            individual = Individual.builder()
+                    .fullName(request.getFullName())
+                    .user(user)
+                    .build();
+            user.setIndividual(individual);
+        }
+
+        // Mark profile as completed
+        user.setProfileCompleted(true);
+
+        // Save changes
+        userRepository.save(user);
+
+        log.info("Profile completed for user: {}", user.getEmail());
+
+        // Build response
+        CompleteProfileResponse response = CompleteProfileResponse.builder()
+                .email(user.getEmail())
+                .fullName(individual.getFullName())
+                .profileCompleted(true)
+                .message("Profile completed successfully")
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
 

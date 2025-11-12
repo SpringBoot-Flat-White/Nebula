@@ -7,9 +7,11 @@ import com.nebula.nebulaCloud.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -75,5 +77,34 @@ public class AuthenticationController {
     @PostMapping("/logout")
     public ResponseEntity<String> logout() {
         return authenticationService.logout();
+    }
+
+    /**
+     * Completes the user profile after OAuth2 registration.
+     *
+     * This endpoint is called once after a user's first OAuth2 login
+     * to allow them to provide their real information.
+     *
+     * @param email The email of the authenticated user (from JWT or session)
+     * @param request The profile completion data
+     * @return A ResponseEntity with the updated profile information
+     */
+    @PostMapping("/complete-profile")
+    public ResponseEntity<com.nebula.nebulaCloud.dto.CompleteProfileResponse> completeProfile(
+            @RequestParam String email,
+            @Valid @RequestBody com.nebula.nebulaCloud.dto.CompleteProfileRequest request
+    ) {
+        return authenticationService.completeProfile(email, request);
+    }
+
+    /**
+     * Test endpoint to verify OAuth2 callback is working.
+     * This helps debug frontend issues after OAuth2 redirect.
+     *
+     * @return A simple success message
+     */
+    @GetMapping("/oauth2-test")
+    public ResponseEntity<String> oauth2Test() {
+        return ResponseEntity.ok("OAuth2 backend is working! You can see this message.");
     }
 }
