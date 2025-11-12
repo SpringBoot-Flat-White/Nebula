@@ -32,5 +32,13 @@ public class AuthenticationResponse {
      */
     private UserType userType;
 
+    /**
+    * user_id
+    */
+    private Long userId;
 
+    /**
+    * user plan id
+    */
+    private Long planId;
 }

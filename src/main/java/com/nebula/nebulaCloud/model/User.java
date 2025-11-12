@@ -68,13 +68,13 @@ public class User implements UserDetails {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-//    /**
-//     * Defines a many-to-one relationship with the Plan entity.
-//     * A user can have one subscribed plan, but a plan can have many users.
-//     */
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "plan_id")
-//    private Plan plan;
+    /**
+     * Defines a many-to-one relationship with the Plan entity.
+     * A user can have one subscribed plan, but a plan can have many users.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private Plan plan;
 
     /**
      * Defines the inverse side of the one-to-one relationship with Individual.
