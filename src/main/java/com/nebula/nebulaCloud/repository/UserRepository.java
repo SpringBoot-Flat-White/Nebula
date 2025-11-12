@@ -31,4 +31,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
      *         Using Optional is a best practice to avoid NullPointerExceptions.
      */
     Optional<User> findByEmail(String email);
+
+    /**
+     * Finds a user by their OAuth2 provider and provider ID.
+     *
+     * This method is used to check if a user has already registered via OAuth2
+     * (Google, GitHub, etc.) based on the provider name and the unique ID from that provider.
+     *
+     * @param provider The OAuth2 provider name (e.g., "google", "github"). Must not be null.
+     * @param providerId The unique user ID from the OAuth2 provider. Must not be null.
+     * @return An {@link Optional} containing the found user, or an empty
+     *         {@link Optional} if no user exists for that provider and ID combination.
+     */
+    Optional<User> findByProviderAndProviderId(String provider, String providerId);
 }
