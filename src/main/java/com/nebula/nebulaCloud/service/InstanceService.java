@@ -10,6 +10,7 @@ import com.nebula.nebulaCloud.dto.InstanceRequest;
 import com.nebula.nebulaCloud.dto.InstanceResponse;
 import com.nebula.nebulaCloud.model.*;
 import com.nebula.nebulaCloud.repository.*;
+import com.nebula.nebulaCloud.utils.DatabaseCredentialGenerator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -115,9 +116,67 @@ public class InstanceService {
         Container container = containerRepository.findByEngine(engine)
                 .orElseThrow(() -> new RuntimeException("No container available for engine: " + engine.getName()));
 
+        String dbUser;
+        String dbPassword;
+        String dbName;
+        boolean userExistsFree = false;
+
+        if (user.getPlan().getName().equals("FREE")){
+            dbUser = DatabaseCredentialGenerator.generateRandomUser(user.getId());
+            dbPassword = DatabaseCredentialGenerator.generateSecurePassword(16);
+            dbName = DatabaseCredentialGenerator.generateDatabaseName(user.getId());
+
+            Optional<Instance> existingDbNameFree = instanceRepository.findByDatabaseName(dbName);
+            if (existingDbNameFree.isPresent()) {
+                throw new RuntimeException("dbName ya existe");
+            }
+
+            Optional<UserDb> existingDbUserFree = userDbRepository.findByDbUser(dbUser);
+            if (existingDbUserFree.isPresent()) {
+                // Verificar si el dbUser pertenece al usuario actual
+                if (!existingDbUserFree.get().getUser().getId().equals(user.getId())) {
+                    throw new RuntimeException("El userdb ya existe");
+                }
+            }
+
+            createDatabaseAndUser(engine, dbName, dbUser, dbPassword, userExistsFree);
+
+            Instance instanceFree = Instance.builder()
+                    .name(user.getUsername())
+                    .databaseName(dbName)
+                    .container(container)
+                    .user(user)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            UserDb userDbFree = UserDb.builder()
+                    .dbUser(dbUser)
+                    .dbPasswordEnc(passwordEncoder.encode(dbPassword))
+                    .user(user)
+                    .build();
+            userDbRepository.save(userDbFree);
+
+            instanceFree.setUserDb(userDbFree);
+
+            instanceRepository.save(instanceFree);
+
+            InstanceResponse response = InstanceResponse.builder()
+                    .id(instanceFree.getId())
+                    .databaseName(instanceFree.getDatabaseName())
+                    .name(instanceFree.getName())
+                    .engineName(engine.getName())
+                    .password(dbPassword)
+                    .userId(instanceFree.getUser().getId())
+                    .containerId(instanceFree.getContainer().getId())
+                    .createdAt(instanceFree.getCreatedAt())
+                    .build();
+
+            return ResponseEntity.ok(response);
+        }
+
         // Limpiar nombres de caracteres especiales
-        String cleanDbUser = request.getDbUser().replaceAll("\\W+", "");
-        String cleanDbName = request.getDatabaseName().replaceAll("\\W+", "");
+        String cleanDbUser = request.getDbUser().replaceAll("[^a-zA-Z0-9_]", "");
+        String cleanDbName = request.getDatabaseName().replaceAll("[^a-zA-Z0-9_]", "");
 
         // Validar si el dbName ya existe
         Optional<Instance> existingDbName = instanceRepository.findByDatabaseName(cleanDbName);
@@ -134,9 +193,7 @@ public class InstanceService {
             }
         }
 
-        String dbUser;
-        String dbPassword;
-        String dbName = cleanDbName;
+        dbName = cleanDbName;
         boolean userExists = false;
 
         if (existingDbUser.isPresent() && existingDbUser.get().getUser().getId().equals(user.getId())) {
@@ -183,7 +240,7 @@ public class InstanceService {
                 .databaseName(instance.getDatabaseName())
                 .name(instance.getName())
                 .engineName(engine.getName())
-                .password(dbPassword != null ? dbPassword : "********") // Si es usuario existente, no mostramos la contraseña
+                .password(dbPassword != null ? dbPassword : dbPassword + " -ya existe") // Si es usuario existente, no mostramos la contraseña
                 .userId(instance.getUser().getId())
                 .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
@@ -197,9 +254,23 @@ public class InstanceService {
             String engineName = engine.getName().toLowerCase();
             EngineDetails conf = getEngineConfig(engineName);
 
+            // Obtener todas las BD que ya pertenecen a este usuario (para PostgreSQL)
+            List<String> userDatabases = null;
+            if (engineName.equals("postgres") && userExists) {
+                // Buscar el UserDb para obtener todas las instancias de este usuario
+                Optional<UserDb> userDb = userDbRepository.findByDbUser(dbUser);
+                if (userDb.isPresent()) {
+                    // Obtener todas las instancias (BD) que pertenecen a este usuario
+                    userDatabases = instanceRepository.findByUser(userDb.get().getUser())
+                            .stream()
+                            .map(Instance::getDatabaseName)
+                            .toList();
+                }
+            }
+
             switch (engineName) {
                 case "mysql" -> createMySQL(conf, dbName, dbUser, dbPassword, userExists);
-                case "postgres" -> createPostgres(conf, dbName, dbUser, dbPassword, userExists);
+                case "postgres" -> createPostgres(conf, dbName, dbUser, dbPassword, userExists, userDatabases);
                 case "sqlserver" -> createSQLServer(conf, dbName, dbUser, dbPassword, userExists);
                 case "mongodb" -> createMongoDB(conf, dbName, dbUser, dbPassword);
                 case "cassandra" -> createCassandra(conf, dbName, dbUser, dbPassword);
@@ -239,16 +310,18 @@ public class InstanceService {
                 stmt.execute("CREATE USER IF NOT EXISTS '" + dbUser + "'@'%' IDENTIFIED BY '" + dbPassword + "'");
             }
 
-            // Otorgar todos los permisos sobre esta base de datos específica
-            // El usuario solo tendrá permisos sobre las bases de datos que se le otorguen explícitamente
-            stmt.execute("GRANT ALL PRIVILEGES ON " + dbName + ".* TO '" + dbUser + "'@'%'");
+            // Otorgar solo permisos de DML (datos) sin DDL (estructura)
+            // SELECT, INSERT, UPDATE, DELETE para trabajar con datos
+            // CREATE, INDEX para crear tablas e índices dentro de la BD
+            // Sin DROP, ALTER, RENAME para que no pueda eliminar ni modificar la estructura de la BD
+            stmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, SHOW VIEW, CREATE VIEW ON " + dbName + ".* TO '" + dbUser + "'@'%'");
 
             // Aplicar cambios
             stmt.execute("FLUSH PRIVILEGES");
         }
     }
 
-    private void createPostgres(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
+    private void createPostgres(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists, List<String> userDatabases) throws Exception {
         String url = "jdbc:postgresql://" + conf.getHost() + ":" + conf.getPort() + "/postgres";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
@@ -256,16 +329,85 @@ public class InstanceService {
             // Crear rol/usuario solo si no existe (no cambiar la contraseña si ya existe)
             if (!userExists) {
                 stmt.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '" + dbUser + "') THEN CREATE ROLE " + dbUser + " LOGIN PASSWORD '" + dbPassword + "'; END IF; END $$;");
+
+                // Configurar atributos del rol (solo para usuarios nuevos)
+                stmt.execute("ALTER ROLE " + dbUser + " NOCREATEDB");
+                stmt.execute("ALTER ROLE " + dbUser + " NOCREATEROLE");
+                stmt.execute("ALTER ROLE " + dbUser + " NOSUPERUSER");
+                stmt.execute("ALTER ROLE " + dbUser + " NOREPLICATION");
+                stmt.execute("ALTER ROLE " + dbUser + " NOBYPASSRLS");
+                stmt.execute("ALTER ROLE " + dbUser + " NOINHERIT");
             }
 
-            // Crear base de datos con el usuario como propietario
-            stmt.execute("CREATE DATABASE " + dbName + " OWNER " + dbUser);
+            // CRÍTICO: Revocar CONNECT de postgres, template0 y template1 ANTES de crear la BD
+            // Esto asegura que el usuario nunca pueda conectarse a estas BD
+            stmt.execute("REVOKE CONNECT ON DATABASE postgres FROM " + dbUser);
+            stmt.execute("REVOKE CONNECT ON DATABASE template0 FROM " + dbUser);
+            stmt.execute("REVOKE CONNECT ON DATABASE template1 FROM " + dbUser);
+
+            // Crear base de datos con postgres como propietario (no el usuario, para evitar que pueda eliminarla)
+            stmt.execute("CREATE DATABASE " + dbName + " OWNER postgres");
 
             // Revocar privilegios de conexión de PUBLIC para que otros no puedan conectarse
             stmt.execute("REVOKE CONNECT ON DATABASE " + dbName + " FROM PUBLIC");
 
-            // Otorgar conexión solo al usuario propietario
+            // Otorgar conexión solo al usuario a SU base de datos (la que acabamos de crear)
             stmt.execute("GRANT CONNECT ON DATABASE " + dbName + " TO " + dbUser);
+
+            // IMPORTANTE: Si el usuario ya tiene otras BD, otorgar CONNECT a todas ellas también
+            if (userDatabases != null && !userDatabases.isEmpty()) {
+                for (String existingDb : userDatabases) {
+                    if (!existingDb.equals(dbName)) { // No duplicar el GRANT de la BD recién creada
+                        try {
+                            stmt.execute("GRANT CONNECT ON DATABASE " + existingDb + " TO " + dbUser);
+                        } catch (Exception e) {
+                            // Ignorar si la BD ya no existe o ya tiene el permiso
+                        }
+                    }
+                }
+            }
+
+            // Construir lista de BD permitidas (la nueva + las existentes del usuario)
+            StringBuilder allowedDatabases = new StringBuilder("'" + dbName + "'");
+            if (userDatabases != null && !userDatabases.isEmpty()) {
+                for (String existingDb : userDatabases) {
+                    if (!existingDb.equals(dbName)) {
+                        allowedDatabases.append(", '").append(existingDb).append("'");
+                    }
+                }
+            }
+
+            // IMPORTANTE: Revocar CONNECT de TODAS las bases de datos EXCEPTO las del usuario
+            // Esto funciona tanto para usuarios nuevos como existentes
+            stmt.execute("DO $$ " +
+                    "DECLARE " +
+                    "    db_rec RECORD; " +
+                    "BEGIN " +
+                    "    FOR db_rec IN SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN (" + allowedDatabases + ") LOOP " +
+                    "        BEGIN " +
+                    "            EXECUTE 'REVOKE CONNECT ON DATABASE ' || quote_ident(db_rec.datname) || ' FROM ' || quote_ident('" + dbUser + "'); " +
+                    "        EXCEPTION WHEN OTHERS THEN " +
+                    "            NULL; " +
+                    "        END; " +
+                    "    END LOOP; " +
+                    "END; " +
+                    "$$;");
+
+            // CRÍTICO: Revocar permisos PUBLIC sobre pg_database en la BD postgres
+            // Esto evita que los usuarios puedan ejecutar SELECT sobre pg_database
+            stmt.execute("REVOKE SELECT ON pg_catalog.pg_database FROM PUBLIC");
+
+            // CRÍTICO: Revocar permisos sobre pg_authid para evitar acceso a información de contraseñas
+            stmt.execute("REVOKE ALL ON pg_catalog.pg_authid FROM PUBLIC");
+            stmt.execute("REVOKE ALL ON pg_catalog.pg_authid FROM " + dbUser);
+
+            // NOTA IMPORTANTE: PostgreSQL permite por defecto que los usuarios cambien su PROPIA contraseña
+            // Esto NO se puede bloquear con Event Triggers (no soportado para ALTER ROLE)
+            // La única forma de bloquearlo completamente es:
+            // 1. Usar autenticación externa (LDAP, Kerberos, OAuth)
+            // 2. Modificar pg_hba.conf para autenticación basada en certificados
+            // 3. Usar una extensión C personalizada
+            // Para este caso, se recomienda implementar rotación de contraseñas desde la aplicación
         }
 
         // Conectarse a la nueva base de datos para configurar permisos del schema
@@ -276,16 +418,63 @@ public class InstanceService {
             // Revocar todos los privilegios del schema public de PUBLIC
             dbStmt.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC");
 
-            // Otorgar todos los privilegios del schema public solo al usuario
-            dbStmt.execute("GRANT ALL ON SCHEMA public TO " + dbUser);
+            // Revocar acceso a schemas del sistema para evitar que vea catálogos
+            dbStmt.execute("REVOKE ALL ON SCHEMA pg_catalog FROM " + dbUser);
+            dbStmt.execute("REVOKE ALL ON SCHEMA information_schema FROM " + dbUser);
 
-            // Otorgar privilegios de uso y creación en el schema
+            // Otorgar solo USAGE (sin permisos adicionales) sobre pg_catalog para funcionalidad básica
+            // Esto permite que funcione la conexión pero limita el acceso a tablas del catálogo
+            dbStmt.execute("GRANT USAGE ON SCHEMA pg_catalog TO " + dbUser);
+            dbStmt.execute("GRANT USAGE ON SCHEMA information_schema TO " + dbUser);
+
+            // Revocar acceso específico a tablas críticas del catálogo
+            // pg_database: lista de todas las bases de datos
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_database FROM PUBLIC");
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_database FROM " + dbUser);
+
+            // pg_tablespace: información de tablespaces
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_tablespace FROM " + dbUser);
+
+            // pg_authid: información de roles y usuarios
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_authid FROM " + dbUser);
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_roles FROM " + dbUser);
+
+            // pg_user: información de usuarios
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_user FROM " + dbUser);
+            dbStmt.execute("REVOKE ALL ON pg_catalog.pg_shadow FROM " + dbUser);
+
+            // Configurar el search_path del usuario para que no incluya pg_catalog por defecto
+            dbStmt.execute("ALTER ROLE " + dbUser + " SET search_path = public");
+
+            // Crear una vista que solo muestre la base de datos actual
+            dbStmt.execute("CREATE OR REPLACE VIEW public.my_databases AS " +
+                    "SELECT current_database() AS datname, " +
+                    "       current_user AS owner, " +
+                    "       pg_database_size(current_database()) AS size");
+
+            // Otorgar SELECT sobre la vista al usuario
+            dbStmt.execute("GRANT SELECT ON public.my_databases TO " + dbUser);
+
+            // Otorgar permisos específicos al usuario para trabajar con tablas
+            // USAGE para usar el schema y CREATE para crear tablas/índices/secuencias
             dbStmt.execute("GRANT USAGE, CREATE ON SCHEMA public TO " + dbUser);
 
-            // Configurar privilegios por defecto para objetos futuros
-            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO " + dbUser);
-            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO " + dbUser);
-            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO " + dbUser);
+            // Otorgar permisos sobre todas las tablas existentes
+            dbStmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + dbUser);
+
+            // Otorgar permisos sobre todas las secuencias existentes
+            dbStmt.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + dbUser);
+
+            // Configurar privilegios por defecto para objetos futuros creados por el root
+            // SELECT, INSERT, UPDATE, DELETE para tablas (sin TRUNCATE, DROP, ALTER)
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO " + dbUser);
+
+            // Configurar privilegios por defecto para objetos creados por el propio usuario
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE " + dbUser + " IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE " + dbUser + " IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES FOR ROLE " + dbUser + " IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO " + dbUser);
         }
     }
 
@@ -303,6 +492,10 @@ public class InstanceService {
                         "BEGIN CREATE LOGIN [%s] WITH PASSWORD = '%s'; END",
                         dbUser, dbUser, dbPassword
                 ));
+
+                // Denegar permisos a nivel de servidor para que no pueda crear/eliminar bases de datos
+                stmt.execute(String.format("DENY ALTER ANY DATABASE TO [%s]", dbUser));
+                stmt.execute(String.format("DENY CREATE ANY DATABASE TO [%s]", dbUser));
             }
 
             // Crear base de datos si no existe
@@ -330,18 +523,43 @@ public class InstanceService {
                     dbUser, dbUser, dbUser
             ));
 
-            // Asignar rol de db_owner al usuario en esta base de datos
+            // Asignar roles de lectura y escritura de datos (sin permisos de DDL)
+            // db_datareader: puede leer todos los datos de todas las tablas
+            // db_datawriter: puede insertar, actualizar y eliminar datos de todas las tablas
+            // NO usar db_owner para evitar que pueda eliminar/modificar la base de datos
             dbStmt.execute(String.format(
                     "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
                     "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
                     "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
-                    "WHERE u.name = '%s' AND r.name = 'db_owner') " +
-                    "BEGIN ALTER ROLE db_owner ADD MEMBER [%s]; END",
+                    "WHERE u.name = '%s' AND r.name = 'db_datareader') " +
+                    "BEGIN ALTER ROLE db_datareader ADD MEMBER [%s]; END",
+                    dbUser, dbUser
+            ));
+
+            dbStmt.execute(String.format(
+                    "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
+                    "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
+                    "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
+                    "WHERE u.name = '%s' AND r.name = 'db_datawriter') " +
+                    "BEGIN ALTER ROLE db_datawriter ADD MEMBER [%s]; END",
+                    dbUser, dbUser
+            ));
+
+            // Asignar permisos para crear tablas, vistas, procedimientos, etc. pero sin poder eliminar la BD
+            dbStmt.execute(String.format(
+                    "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
+                    "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
+                    "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
+                    "WHERE u.name = '%s' AND r.name = 'db_ddladmin') " +
+                    "BEGIN ALTER ROLE db_ddladmin ADD MEMBER [%s]; END",
                     dbUser, dbUser
             ));
 
             // Otorgar permisos explícitos para ver esta base de datos
             dbStmt.execute(String.format("GRANT VIEW DEFINITION ON DATABASE::[%s] TO [%s]", dbName, dbUser));
+
+            // Denegar permisos para eliminar o modificar la base de datos
+            dbStmt.execute(String.format("DENY ALTER ON DATABASE::[%s] TO [%s]", dbName, dbUser));
         }
     }
 
