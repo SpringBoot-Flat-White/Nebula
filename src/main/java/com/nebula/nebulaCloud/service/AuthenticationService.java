@@ -165,6 +165,8 @@ public class AuthenticationService {
                 .email(user.getEmail())
                 .fullName(fullName)
                 .userType(user.getUserType())
+                .planId(user.getPlan() != null ? user.getPlan().getId() : null)
+                .userId(user.getId())
                 .build();
 
         // 7. Return the final ResponseEntity, adding the cookie to the headers and the DTO to the body.
@@ -248,6 +250,58 @@ public class AuthenticationService {
                 .fullName(individual.getFullName())
                 .profileCompleted(true)
                 .message("Profile completed successfully")
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Gets the current authenticated user's information from JWT cookie.
+     *
+     * This method retrieves the authenticated user from the security context
+     * (populated by JwtAuthenticationFilter from the JWT cookie)
+     * and returns their information in AuthenticationResponse format.
+     *
+     * @return A {@link ResponseEntity} with the current user's information
+     * @throws IllegalStateException if no user is authenticated or user not found
+     */
+    @Transactional(readOnly = true)
+    public ResponseEntity<AuthenticationResponse> getCurrentUser() {
+        // Get current authenticated user from security context
+        org.springframework.security.core.Authentication authentication =
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() ||
+            "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new IllegalStateException("No authenticated user found");
+        }
+
+        // Get user email from authentication (set by JwtAuthenticationFilter)
+        String email = authentication.getName();
+
+        // Fetch user from database
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        // Get full name with fallback
+        String fullName = "";
+        if (user.getIndividual() != null && user.getIndividual().getFullName() != null) {
+            fullName = user.getIndividual().getFullName().trim();
+        }
+
+        // If fullName is still empty, use email username part as fallback
+        if (fullName.isEmpty()) {
+            String userEmail = user.getEmail();
+            fullName = userEmail.contains("@") ? userEmail.substring(0, userEmail.indexOf("@")) : userEmail;
+        }
+
+        // Build response
+        AuthenticationResponse response = AuthenticationResponse.builder()
+                .email(user.getEmail())
+                .fullName(fullName)
+                .userType(user.getUserType())
+                .userId(user.getId())
+                .planId(user.getPlan() != null ? user.getPlan().getId() : null)
                 .build();
 
         return ResponseEntity.ok(response);

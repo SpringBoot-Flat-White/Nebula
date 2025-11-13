@@ -13,6 +13,7 @@ import com.nebula.nebulaCloud.repository.*;
 import com.nebula.nebulaCloud.utils.DatabaseCredentialGenerator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InstanceService {
@@ -38,6 +40,7 @@ public class InstanceService {
     private final EngineConfig engineConfig;
     private final ContainerRepository containerRepository;
     private final UserDbRepository userDbRepository;
+    private final EmailService emailService;
 
     public ResponseEntity<List<InstanceResponse>> getAllByUserId(Long userId) {
 
@@ -49,11 +52,18 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
+
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -74,11 +84,17 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -90,11 +106,17 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -235,16 +257,27 @@ public class InstanceService {
 
         instanceRepository.save(instance);
 
+        // Send credentials email to user with the plain password (before it was encrypted)
+        try {
+            emailService.sendDatabaseCredentials(user.getEmail(), instance, dbPassword);
+            log.info("Database credentials email sent successfully to: {}", user.getEmail());
+        } catch (Exception e) {
+            // Log error but don't fail the instance creation
+            // The instance was created successfully, email is just a notification
+            log.error("Failed to send credentials email to {}: {}", user.getEmail(), e.getMessage());
+        }
+
         InstanceResponse response = InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
                 .engineName(engine.getName())
                 .password(dbPassword != null ? dbPassword : dbPassword + " -ya existe") // Si es usuario existente, no mostramos la contraseña
                 .userId(instance.getUser().getId())
                 .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
                 .build();
+
+
 
         return ResponseEntity.ok(response);
     }
