@@ -23,6 +23,8 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -102,17 +104,53 @@ public class InstanceService {
         User user = userRepository.findById(request.getUser())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        int userInstancesCount = instanceRepository.findByUser(user).size();
+        if (userInstancesCount >= user.getPlan().getMaxInstances()) {
+            throw new RuntimeException("Instance limit reached for user plan");
+        }
+
         Engine engine = engineRepository.findById(request.getEngineId())
                 .orElseThrow(() -> new RuntimeException("Engine not found"));
 
         Container container = containerRepository.findByEngine(engine)
                 .orElseThrow(() -> new RuntimeException("No container available for engine: " + engine.getName()));
 
-        String dbUser = "user_" + user.getId() + "_" + request.getDbUser();
-        String dbPassword = "pass_" + user.getId() +(int) (Math.random() * 10000);
-        String dbName = "db_" + user.getId() + "_" + request.getDatabaseName();
+        // Limpiar nombres de caracteres especiales
+        String cleanDbUser = request.getDbUser().replaceAll("\\W+", "");
+        String cleanDbName = request.getDatabaseName().replaceAll("\\W+", "");
 
-        createDatabaseAndUser(engine, dbName, dbUser, dbPassword);
+        // Validar si el dbName ya existe
+        Optional<Instance> existingDbName = instanceRepository.findByDatabaseName(cleanDbName);
+        if (existingDbName.isPresent()) {
+            throw new RuntimeException("dbName ya existe");
+        }
+
+        // Validar si el dbUser ya existe
+        Optional<UserDb> existingDbUser = userDbRepository.findByDbUser(cleanDbUser);
+        if (existingDbUser.isPresent()) {
+            // Verificar si el dbUser pertenece al usuario actual
+            if (!existingDbUser.get().getUser().getId().equals(user.getId())) {
+                throw new RuntimeException("El userdb ya existe");
+            }
+        }
+
+        String dbUser;
+        String dbPassword;
+        String dbName = cleanDbName;
+        boolean userExists = false;
+
+        if (existingDbUser.isPresent() && existingDbUser.get().getUser().getId().equals(user.getId())) {
+            // Reutilizar credenciales existentes del usuario
+            userExists = true;
+            dbUser = existingDbUser.get().getDbUser();
+            dbPassword = null; // No necesitamos la contraseña en texto plano
+        } else {
+            // Crear nuevas credenciales
+            dbUser = cleanDbUser;
+            dbPassword = "pass_" + user.getId() + UUID.randomUUID().toString().substring(0, 8);
+        }
+
+        createDatabaseAndUser(engine, dbName, dbUser, dbPassword, userExists);
 
         Instance instance = Instance.builder()
                 .name(user.getUsername())
@@ -122,13 +160,19 @@ public class InstanceService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        UserDb userDb = UserDb.builder()
-                .dbUser(dbUser)
-                .dbPasswordEnc(passwordEncoder.encode(dbPassword))
-                .user(user)
-                .build();
-
-        userDbRepository.save(userDb);
+        UserDb userDb;
+        if (userExists) {
+            // Reutilizar el UserDb existente
+            userDb = existingDbUser.get();
+        } else {
+            // Crear nuevo UserDb
+            userDb = UserDb.builder()
+                    .dbUser(dbUser)
+                    .dbPasswordEnc(passwordEncoder.encode(dbPassword))
+                    .user(user)
+                    .build();
+            userDbRepository.save(userDb);
+        }
 
         instance.setUserDb(userDb);
 
@@ -139,7 +183,7 @@ public class InstanceService {
                 .databaseName(instance.getDatabaseName())
                 .name(instance.getName())
                 .engineName(engine.getName())
-                .password(dbPassword)
+                .password(dbPassword != null ? dbPassword : "********") // Si es usuario existente, no mostramos la contraseña
                 .userId(instance.getUser().getId())
                 .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
@@ -148,15 +192,15 @@ public class InstanceService {
         return ResponseEntity.ok(response);
     }
 
-    private void createDatabaseAndUser(Engine engine, String dbName, String dbUser, String dbPassword) {
+    private void createDatabaseAndUser(Engine engine, String dbName, String dbUser, String dbPassword, boolean userExists) {
         try {
             String engineName = engine.getName().toLowerCase();
             EngineDetails conf = getEngineConfig(engineName);
 
             switch (engineName) {
-                case "mysql" -> createMySQL(conf, dbName, dbUser, dbPassword);
-                case "postgres" -> createPostgres(conf, dbName, dbUser, dbPassword);
-                case "sqlserver" -> createSQLServer(conf, dbName, dbUser, dbPassword);
+                case "mysql" -> createMySQL(conf, dbName, dbUser, dbPassword, userExists);
+                case "postgres" -> createPostgres(conf, dbName, dbUser, dbPassword, userExists);
+                case "sqlserver" -> createSQLServer(conf, dbName, dbUser, dbPassword, userExists);
                 case "mongodb" -> createMongoDB(conf, dbName, dbUser, dbPassword);
                 case "cassandra" -> createCassandra(conf, dbName, dbUser, dbPassword);
                 case "redis" -> createRedis(conf, dbUser, dbPassword);
@@ -182,37 +226,84 @@ public class InstanceService {
 
 
 
-    private void createMySQL(EngineDetails conf, String dbName, String dbUser, String dbPassword) throws Exception {
+    private void createMySQL(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
         String url = "jdbc:mysql://" + conf.getHost() + ":" + conf.getPort() + "/?allowPublicKeyRetrieval=true&useSSL=false";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
+
+            // Crear base de datos si no existe
             stmt.execute("CREATE DATABASE IF NOT EXISTS " + dbName);
-            stmt.execute("CREATE USER IF NOT EXISTS '" + dbUser + "'@'%' IDENTIFIED BY '" + dbPassword + "'");
+
+            // Crear usuario solo si no existe (no cambiar la contraseña si ya existe)
+            if (!userExists) {
+                stmt.execute("CREATE USER IF NOT EXISTS '" + dbUser + "'@'%' IDENTIFIED BY '" + dbPassword + "'");
+            }
+
+            // Otorgar todos los permisos sobre esta base de datos específica
+            // El usuario solo tendrá permisos sobre las bases de datos que se le otorguen explícitamente
             stmt.execute("GRANT ALL PRIVILEGES ON " + dbName + ".* TO '" + dbUser + "'@'%'");
+
+            // Aplicar cambios
+            stmt.execute("FLUSH PRIVILEGES");
         }
     }
 
-    private void createPostgres(EngineDetails conf, String dbName, String dbUser, String dbPassword) throws Exception {
+    private void createPostgres(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
         String url = "jdbc:postgresql://" + conf.getHost() + ":" + conf.getPort() + "/postgres";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
-            stmt.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '" + dbUser + "') THEN CREATE ROLE " + dbUser + " LOGIN PASSWORD '" + dbPassword + "'; END IF; END $$;");
+
+            // Crear rol/usuario solo si no existe (no cambiar la contraseña si ya existe)
+            if (!userExists) {
+                stmt.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '" + dbUser + "') THEN CREATE ROLE " + dbUser + " LOGIN PASSWORD '" + dbPassword + "'; END IF; END $$;");
+            }
+
+            // Crear base de datos con el usuario como propietario
             stmt.execute("CREATE DATABASE " + dbName + " OWNER " + dbUser);
+
+            // Revocar privilegios de conexión de PUBLIC para que otros no puedan conectarse
+            stmt.execute("REVOKE CONNECT ON DATABASE " + dbName + " FROM PUBLIC");
+
+            // Otorgar conexión solo al usuario propietario
+            stmt.execute("GRANT CONNECT ON DATABASE " + dbName + " TO " + dbUser);
+        }
+
+        // Conectarse a la nueva base de datos para configurar permisos del schema
+        String dbUrl = "jdbc:postgresql://" + conf.getHost() + ":" + conf.getPort() + "/" + dbName;
+        try (Connection dbConn = DriverManager.getConnection(dbUrl, conf.getRootUser(), conf.getRootPassword());
+             Statement dbStmt = dbConn.createStatement()) {
+
+            // Revocar todos los privilegios del schema public de PUBLIC
+            dbStmt.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC");
+
+            // Otorgar todos los privilegios del schema public solo al usuario
+            dbStmt.execute("GRANT ALL ON SCHEMA public TO " + dbUser);
+
+            // Otorgar privilegios de uso y creación en el schema
+            dbStmt.execute("GRANT USAGE, CREATE ON SCHEMA public TO " + dbUser);
+
+            // Configurar privilegios por defecto para objetos futuros
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO " + dbUser);
+            dbStmt.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO " + dbUser);
         }
     }
 
-    private void createSQLServer(EngineDetails conf, String dbName, String dbUser, String dbPassword) throws Exception {
+    private void createSQLServer(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
         String url = "jdbc:sqlserver://" + conf.getHost() + ":" + conf.getPort() +
                 ";encrypt=true;trustServerCertificate=true";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
 
-            // Crear login si no existe (solo una vez por usuario)
-            stmt.execute(String.format(
-                    "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = '%s') " +
-                    "BEGIN CREATE LOGIN [%s] WITH PASSWORD = '%s'; END",
-                    dbUser, dbUser, dbPassword
-            ));
+            System.out.printf(url);
+            // Crear login solo si no existe y si el usuario no existe previamente
+            if (!userExists) {
+                stmt.execute(String.format(
+                        "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = '%s') " +
+                        "BEGIN CREATE LOGIN [%s] WITH PASSWORD = '%s'; END",
+                        dbUser, dbUser, dbPassword
+                ));
+            }
 
             // Crear base de datos si no existe
             stmt.execute(String.format(
