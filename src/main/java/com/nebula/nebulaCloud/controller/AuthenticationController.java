@@ -98,19 +98,17 @@ public class AuthenticationController {
     }
 
     /**
-     * Gets the current authenticated user's information including updated plan.
+     * Get current authenticated user information.
      *
-     * This endpoint is used by the frontend to refresh user data,
-     * especially after payment completion.
+     * This endpoint reads the JWT from the cookie automatically and returns
+     * the current user's data in AuthenticationResponse format.
+     * Used by frontend after OAuth2 redirect to get user data in JSON format.
      *
-     * @param authentication The authenticated user from Spring Security
-     * @return A ResponseEntity with the current user information
+     * @return A ResponseEntity with the current user's information
      */
     @GetMapping("/me")
-    public ResponseEntity<AuthenticationResponse> getCurrentUser(
-            org.springframework.security.core.Authentication authentication
-    ) {
-        return authenticationService.getCurrentUser(authentication);
+    public ResponseEntity<AuthenticationResponse> getCurrentUser() {
+        return authenticationService.getCurrentUser();
     }
 
     /**
