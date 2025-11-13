@@ -48,15 +48,20 @@ public class SecurityConfig {
 
                 // 2. Configure authorization rules for HTTP requests.
                 .authorizeHttpRequests(auth -> auth
+                        // Allow all OPTIONS requests (CORS preflight)
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Define public endpoints that do not require authentication.
                         // It is a common practice to make auth-related endpoints (login, register) public.
-                        .requestMatchers("/api/v1/auth/**","/api/organizations/**","/api/individuals/**", "/v3/api-docs/**", "/swagger-ui/**","/swagger-ui.html").permitAll()
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/complete-profile", "/api/v1/auth/oauth2-test").permitAll()
+                        .requestMatchers("/api/organizations/**","/api/individuals/**", "/v3/api-docs/**", "/swagger-ui/**","/swagger-ui.html").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // Mercado Pago webhook endpoint (public for notifications)
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
                         // Mercado Pago return URLs (public for redirection)
                         .requestMatchers("/api/v1/payments/success", "/api/v1/payments/failure", "/api/v1/payments/pending").permitAll()
+                        // Authenticated endpoints
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
                 )

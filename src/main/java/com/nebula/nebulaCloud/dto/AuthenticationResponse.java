@@ -32,5 +32,9 @@ public class AuthenticationResponse {
      */
     private UserType userType;
 
+    /**
+     * The name of the user's current plan.
+     */
+    private String plan;
 
 }

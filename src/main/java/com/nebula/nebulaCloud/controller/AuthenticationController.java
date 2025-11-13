@@ -98,6 +98,22 @@ public class AuthenticationController {
     }
 
     /**
+     * Gets the current authenticated user's information including updated plan.
+     *
+     * This endpoint is used by the frontend to refresh user data,
+     * especially after payment completion.
+     *
+     * @param authentication The authenticated user from Spring Security
+     * @return A ResponseEntity with the current user information
+     */
+    @GetMapping("/me")
+    public ResponseEntity<AuthenticationResponse> getCurrentUser(
+            org.springframework.security.core.Authentication authentication
+    ) {
+        return authenticationService.getCurrentUser(authentication);
+    }
+
+    /**
      * Test endpoint to verify OAuth2 callback is working.
      * This helps debug frontend issues after OAuth2 redirect.
      *
