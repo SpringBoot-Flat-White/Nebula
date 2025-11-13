@@ -8,8 +8,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Represents a user account in the system.
@@ -68,13 +70,13 @@ public class User implements UserDetails {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-//    /**
-//     * Defines a many-to-one relationship with the Plan entity.
-//     * A user can have one subscribed plan, but a plan can have many users.
-//     */
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "plan_id")
-//    private Plan plan;
+    /**
+     * Defines a many-to-one relationship with the Plan entity.
+     * A user can have one subscribed plan, but a plan can have many users.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_id")
+    private Plan plan;
 
     /**
      * Defines the inverse side of the one-to-one relationship with Individual.
@@ -87,6 +89,9 @@ public class User implements UserDetails {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Organization organization;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Instance> instances = new ArrayList<>();
 
 
     // --- Métodos de UserDetails ---

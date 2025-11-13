@@ -57,14 +57,38 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
         response.addHeader("Set-Cookie", jwtCookie.toString());
 
-        // Build redirect URL with profileCompleted status
-        String targetUrl = UriComponentsBuilder.fromUriString(redirectUrl)
+        // Get full name with fallback
+        String fullName = "";
+        if (user.getIndividual() != null && user.getIndividual().getFullName() != null) {
+            fullName = user.getIndividual().getFullName().trim();
+        }
+
+        // If fullName is still empty, use email username part as fallback
+        if (fullName.isEmpty()) {
+            String userEmail = user.getEmail();
+            fullName = userEmail.contains("@") ? userEmail.substring(0, userEmail.indexOf("@")) : userEmail;
+        }
+
+        // Get planId if exists
+        Long planId = (user.getPlan() != null) ? user.getPlan().getId() : null;
+
+        // Build redirect URL with ALL user data in JSON format
+        UriComponentsBuilder urlBuilder = UriComponentsBuilder.fromUriString(redirectUrl)
             .queryParam("profileCompleted", user.getProfileCompleted())
             .queryParam("email", user.getEmail())
-            .build()
-            .toUriString();
+            .queryParam("fullName", fullName)
+            .queryParam("userType", user.getUserType().name())
+            .queryParam("userId", user.getId());
 
-        log.info("Redirecting to: {}", targetUrl);
+        // Add planId only if it exists
+        if (planId != null) {
+            urlBuilder.queryParam("planId", planId);
+        }
+
+        String targetUrl = urlBuilder.build().toUriString();
+
+        log.info("Redirecting to: {} with user data - userId: {}, userType: {}, planId: {}",
+                 targetUrl, user.getId(), user.getUserType(), planId);
 
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
