@@ -12,6 +12,7 @@ import com.nebula.nebulaCloud.model.*;
 import com.nebula.nebulaCloud.repository.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InstanceService {
@@ -35,6 +37,7 @@ public class InstanceService {
     private final EngineConfig engineConfig;
     private final ContainerRepository containerRepository;
     private final UserDbRepository userDbRepository;
+    private final EmailService emailService;
 
     public ResponseEntity<List<InstanceResponse>> getAllByUserId(Long userId) {
 
@@ -152,6 +155,16 @@ public class InstanceService {
         instance.setUserDb(userDb);
 
         instanceRepository.save(instance);
+
+        // Send credentials email to user with the plain password (before it was encrypted)
+        try {
+            emailService.sendDatabaseCredentials(user.getEmail(), instance, dbPassword);
+            log.info("Database credentials email sent successfully to: {}", user.getEmail());
+        } catch (Exception e) {
+            // Log error but don't fail the instance creation
+            // The instance was created successfully, email is just a notification
+            log.error("Failed to send credentials email to {}: {}", user.getEmail(), e.getMessage());
+        }
 
         InstanceResponse response = InstanceResponse.builder()
                 .id(instance.getId())
