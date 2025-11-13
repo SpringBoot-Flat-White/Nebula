@@ -16,6 +16,11 @@ public class InstanceController {
 
     private final InstanceService instanceService;
 
+    @GetMapping
+    public ResponseEntity<List<InstanceResponse>> getAll() {
+        return instanceService.getAll();
+    }
+
     @PostMapping
     public ResponseEntity<InstanceResponse> createInstance(@RequestBody InstanceRequest request) {
         return instanceService.create(request);
