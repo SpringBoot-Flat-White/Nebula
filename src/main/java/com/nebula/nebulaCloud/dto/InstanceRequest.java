@@ -17,9 +17,6 @@ public class InstanceRequest {
     @NotNull(message = "User ID is required")
     private Long user;
 
-    @NotNull(message = "Container ID is required")
-    private Long containerId;
-
     @NotNull(message = "Engine ID is required")
     private Long engineId;
 
