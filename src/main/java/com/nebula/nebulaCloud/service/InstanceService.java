@@ -625,16 +625,5 @@ public class InstanceService {
         }
     }
 
-    /*
-    private EngineConfig.EngineProperties getEngineConfig(String name) {
-        return switch (name) {
-            case "mysql" -> engineConfig.getMysql();
-            case "postgres" -> engineConfig.getPostgres();
-            case "sqlserver" -> engineConfig.getSqlserver();
-            case "mongodb" -> engineConfig.getMongodb();
-            case "cassandra" -> engineConfig.getCassandra();
-            case "redis" -> engineConfig.getRedis();
-            default -> throw new IllegalArgumentException("Unknown engine: " + name);
-        };
-    }*/
+
 }
