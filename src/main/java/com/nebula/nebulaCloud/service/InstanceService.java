@@ -185,7 +185,6 @@ public class InstanceService {
             InstanceResponse response = InstanceResponse.builder()
                     .id(instanceFree.getId())
                     .databaseName(instanceFree.getDatabaseName())
-                    .name(instanceFree.getName())
                     .engineName(engine.getName())
                     .password(dbPassword)
                     .userId(instanceFree.getUser().getId())
