@@ -46,11 +46,18 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
+
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -71,11 +78,17 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -87,11 +100,17 @@ public class InstanceService {
         List<InstanceResponse> responses = instances.stream().map(instance -> InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
-                .engineName(instance.getContainer().getEngine().getName())
-                .userId(instance.getUser().getId())
-                .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
+
+
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .engineName(instance.getContainer().getEngine().getName())
+
+                .dbUsername(instance.getUserDb().getDbUser())
+
+                .userId(instance.getUser().getId())
                 .build()).toList();
         return ResponseEntity.ok(responses);
     }
@@ -137,13 +156,14 @@ public class InstanceService {
         InstanceResponse response = InstanceResponse.builder()
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
-                .name(instance.getName())
                 .engineName(engine.getName())
                 .password(dbPassword)
                 .userId(instance.getUser().getId())
                 .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
                 .build();
+
+
 
         return ResponseEntity.ok(response);
     }

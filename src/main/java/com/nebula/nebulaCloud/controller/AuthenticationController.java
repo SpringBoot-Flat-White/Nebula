@@ -98,6 +98,20 @@ public class AuthenticationController {
     }
 
     /**
+     * Get current authenticated user information.
+     *
+     * This endpoint reads the JWT from the cookie automatically and returns
+     * the current user's data in AuthenticationResponse format.
+     * Used by frontend after OAuth2 redirect to get user data in JSON format.
+     *
+     * @return A ResponseEntity with the current user's information
+     */
+    @GetMapping("/me")
+    public ResponseEntity<AuthenticationResponse> getCurrentUser() {
+        return authenticationService.getCurrentUser();
+    }
+
+    /**
      * Test endpoint to verify OAuth2 callback is working.
      * This helps debug frontend issues after OAuth2 redirect.
      *

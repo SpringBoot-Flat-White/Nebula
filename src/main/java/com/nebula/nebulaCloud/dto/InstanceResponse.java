@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 public class InstanceResponse {
 
     private Long id;
-    private String name;
     private String status;
     private String databaseName;
     private LocalDateTime createdAt;
@@ -30,10 +29,9 @@ public class InstanceResponse {
 
     // Database connection information (no password exposed)
     private String dbUsername;
-    private String connectionString;
     private String password;
 
     // User information
     private Long userId;
-    private String userEmail;
+
 }
