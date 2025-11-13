@@ -164,6 +164,8 @@ public class AuthenticationService {
                 .fullName(fullName)
                 .userType(user.getUserType())
                 .plan(planName)
+                .userId(user.getId())
+                .planId(user.getPlan().getId())
                 .build();
 
         // 7. Return the final ResponseEntity, adding the cookie to the headers and the DTO to the body.
