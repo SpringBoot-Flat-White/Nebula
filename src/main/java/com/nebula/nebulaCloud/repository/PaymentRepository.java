@@ -5,6 +5,7 @@ import com.nebula.nebulaCloud.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,4 +29,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      * Busca todos los pagos de un usuario.
      */
     List<Payment> findByUser(User user);
+
+    /**
+     * Busca pagos por estado creados antes de una fecha/hora dada.
+     * Usado para expirar pagos pendientes antiguos.
+     */
+    List<Payment> findByStatusAndCreatedAtBefore(Payment.Status status, LocalDateTime createdAt);
 }

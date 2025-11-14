@@ -7,6 +7,9 @@ import com.nebula.nebulaCloud.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -55,7 +58,8 @@ public class PaymentController {
     @Operation(summary = "Mercado Pago Webhook",
             description = "Receives notifications of payment status changes")
     public ResponseEntity<String> handlePaymentNotification(
-            @RequestParam("data.id") Long paymentId
+            @RequestParam("data.id") Long paymentId,
+            @RequestBody Map<String,Object> data
     ) {
         try {
             org.slf4j.LoggerFactory.getLogger(this.getClass())

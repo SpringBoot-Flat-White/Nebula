@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -126,6 +128,7 @@ public class MercadoPagoService {
                     .paymentMethods(paymentMethods) // Allow multiple payment methods
                     .statementDescriptor("NebulaCloud Plan") // Name that appears on card statement
                     .externalReference("USER_" + userEmail + "_PLAN_" + plan.getId()) // Reference for tracking
+                    .expirationDateTo(OffsetDateTime.now().plusMinutes(29)) // 29 minutes from now
                     .build();
             
             // Create preference
