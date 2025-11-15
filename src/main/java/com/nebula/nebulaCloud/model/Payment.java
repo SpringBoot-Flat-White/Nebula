@@ -55,10 +55,16 @@ public class Payment {
     private Status status;
 
     /**
-     * Identifier returned by the external transaction processor.
+     * Identifier returned by the external transaction processor (Preference ID).
      */
     @Column(name = "transaction_id", length = 100)
     private String transactionId;
+
+    /**
+     * Mercado Pago Payment ID (used to match webhook notifications).
+     */
+    @Column(name = "mercado_pago_payment_id", length = 100)
+    private String mercadoPagoPaymentId;
 
     /**
      * Total amount paid for the plan.
