@@ -102,4 +102,26 @@ public class PaymentController {
     public ResponseEntity<String> paymentPending() {
         return ResponseEntity.ok("Your payment is pending confirmation.");
     }
+
+    /**
+     * Gets the transaction history for the authenticated user.
+     * 
+     * @param authentication Authenticated user data.
+     * @return List of transactions.
+     */
+    @GetMapping("/transactions")
+    @Operation(summary = "Get user transaction history",
+            description = "Retrieves all transactions/payments for the authenticated user")
+    public ResponseEntity<java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse>> getTransactions(
+            Authentication authentication
+    ) {
+        // Get the user from the principal
+        User user = (User) authentication.getPrincipal();
+        
+        // Get transaction history
+        java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse> transactions = 
+                paymentService.getTransactionHistory(user.getId());
+
+        return ResponseEntity.ok(transactions);
+    }
 }

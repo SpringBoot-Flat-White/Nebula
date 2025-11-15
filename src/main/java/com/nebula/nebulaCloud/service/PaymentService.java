@@ -189,4 +189,30 @@ public class PaymentService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return paymentRepository.findByUser(user);
     }
+
+    /**
+     * Gets transaction history for a user as DTOs.
+     * 
+     * @param userId User ID.
+     * @return List of transaction responses.
+     */
+    public java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse> getTransactionHistory(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        java.util.List<com.nebula.nebulaCloud.model.Payment> payments = paymentRepository.findByUser(user);
+        
+        return payments.stream()
+                .map(payment -> com.nebula.nebulaCloud.dto.TransactionResponse.builder()
+                        .id(payment.getId())
+                        .planName(payment.getPlan().getName())
+                        .amount(payment.getAmount())
+                        .status(payment.getStatus().name())
+                        .transactionId(payment.getTransactionId())
+                        .mercadoPagoPaymentId(payment.getMercadoPagoPaymentId())
+                        .createdAt(payment.getCreatedAt())
+                        .build())
+                .sorted((t1, t2) -> t2.getCreatedAt().compareTo(t1.getCreatedAt())) // Most recent first
+                .collect(java.util.stream.Collectors.toList());
+    }
 }
