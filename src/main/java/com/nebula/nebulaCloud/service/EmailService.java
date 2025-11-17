@@ -43,27 +43,45 @@ public class EmailService {
      */
     public void sendDatabaseCredentials(String userEmail, Instance instance, String plainPassword) {
         try {
+            log.info("==================== EMAIL SENDING START ====================");
             log.info("Preparing to send database credentials email to: {}", userEmail);
+            log.info("From: {} ({})", fromEmail, fromName);
+            log.info("Subject: Your Database Instance is Ready - Nebula Cloud");
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
             helper.setFrom(fromEmail, fromName);
             helper.setTo(userEmail);
-            helper.setSubject("🎉 Your Database Instance is Ready - Nebula Cloud");
+            helper.setSubject("Your Database Instance is Ready - Nebula Cloud");
+
+            // Add headers to improve deliverability
+            message.addHeader("X-Priority", "1");
+            message.addHeader("X-MSMail-Priority", "High");
+            message.addHeader("Importance", "High");
+            message.addHeader("X-Mailer", "Nebula Cloud Platform");
 
             String htmlContent = buildCredentialsEmailHtml(instance, plainPassword);
             helper.setText(htmlContent, true);
 
+            log.info("Attempting to send email via SMTP...");
             mailSender.send(message);
-
-            log.info("Database credentials email sent successfully to: {}", userEmail);
+            log.info("✅ Email sent successfully to: {}", userEmail);
+            log.info("==================== EMAIL SENDING END ====================");
 
         } catch (MessagingException e) {
-            log.error("Failed to send database credentials email to: {}. Error: {}", userEmail, e.getMessage());
+            log.error("==================== EMAIL SENDING FAILED ====================");
+            log.error("❌ MessagingException when sending to: {}", userEmail);
+            log.error("Error message: {}", e.getMessage());
+            log.error("Error type: {}", e.getClass().getName());
+            log.error("Stack trace: ", e);
             throw new RuntimeException("Failed to send credentials email: " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Unexpected error while sending email to: {}. Error: {}", userEmail, e.getMessage());
+            log.error("==================== EMAIL SENDING FAILED ====================");
+            log.error("❌ Unexpected error when sending to: {}", userEmail);
+            log.error("Error message: {}", e.getMessage());
+            log.error("Error type: {}", e.getClass().getName());
+            log.error("Stack trace: ", e);
             throw new RuntimeException("Unexpected error sending email: " + e.getMessage(), e);
         }
     }
