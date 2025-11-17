@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * Data Transfer Object for instance response data.
+ * DTO for instance response data.
  */
 @Data
 @NoArgsConstructor
@@ -16,22 +16,37 @@ import java.time.LocalDateTime;
 @Builder
 public class InstanceResponse {
 
+    // TODO: Instance unique ID
     private Long id;
+
+    // TODO: Instance status (RUNNING, SUSPENDED, etc.)
     private String status;
+
+    // TODO: Database name
     private String databaseName;
+
+    // TODO: Instance creation timestamp
     private LocalDateTime createdAt;
 
-    // Container information
+    // TODO: Container ID
     private Long containerId;
+
+    // TODO: Container IP address
     private String containerIp;
+
+    // TODO: Container port
     private Integer containerPort;
+
+    // TODO: Engine name (MySQL, PostgreSQL, etc.)
     private String engineName;
 
-    // Database connection information (no password exposed)
+    // TODO: Database username (password not exposed)
     private String dbUsername;
+
+    // TODO: Database password
     private String password;
 
-    // User information
+    // TODO: User ID who owns the instance
     private Long userId;
 
 }

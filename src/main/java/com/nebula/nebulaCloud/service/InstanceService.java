@@ -30,6 +30,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Service for managing database instances.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -44,6 +47,7 @@ public class InstanceService {
     private final UserDbRepository userDbRepository;
     private final EmailService emailService;
 
+    // TODO: Get all instances for a specific user
     public ResponseEntity<List<InstanceResponse>> getAllByUserId(Long userId) {
 
         User user = userRepository.findById(userId)

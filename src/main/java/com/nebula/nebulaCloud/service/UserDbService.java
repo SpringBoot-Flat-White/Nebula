@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing database users.
+ */
 @Service
 @RequiredArgsConstructor
 public class UserDbService {
@@ -23,6 +26,7 @@ public class UserDbService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // TODO: Create a new database user
     public ResponseEntity<UserDbResponse> create(UserDbRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUserId()));
@@ -42,6 +46,7 @@ public class UserDbService {
                 .build());
     }
 
+    // TODO: Get all database users for a specific user
     public ResponseEntity<List<UserDbResponse>> getByUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
@@ -57,6 +62,7 @@ public class UserDbService {
         return ResponseEntity.ok(list);
     }
 
+    // TODO: Delete a database user by ID
     public ResponseEntity<Void> delete(Long id) {
         userDbRepository.deleteById(id);
         return ResponseEntity.noContent().build();

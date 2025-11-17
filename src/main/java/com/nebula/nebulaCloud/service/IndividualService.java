@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing individual profiles.
+ */
 @Service
 @RequiredArgsConstructor
 public class IndividualService {
@@ -20,6 +23,7 @@ public class IndividualService {
     private final IndividualRepository individualRepository;
     private final UserRepository userRepository;
 
+    // TODO: Create a new individual profile
     public IndividualResponse create(IndividualRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUserId()));
@@ -38,6 +42,7 @@ public class IndividualService {
                 .build();
     }
 
+    // TODO: Get all individual profiles
     public List<IndividualResponse> findAll() {
         return individualRepository.findAll()
                 .stream()
@@ -49,6 +54,7 @@ public class IndividualService {
                 .collect(Collectors.toList());
     }
 
+    // TODO: Get individual profile by ID
     public IndividualResponse findById(Long id) {
         Individual i = individualRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Individual not found with ID: " + id));
@@ -60,6 +66,7 @@ public class IndividualService {
                 .build();
     }
 
+    // TODO: Delete an individual profile
     public void delete(Long id) {
         if (!individualRepository.existsById(id)) {
             throw new ResourceNotFoundException("Individual not found with ID: " + id);

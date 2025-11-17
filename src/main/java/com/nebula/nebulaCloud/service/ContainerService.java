@@ -18,6 +18,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing database containers.
+ */
 @Service
 @RequiredArgsConstructor
 public class ContainerService {
@@ -25,9 +28,7 @@ public class ContainerService {
     private final ContainerRepository containerRepository;
     private final EngineRepository engineRepository;
 
-    // =====================
-    // CREATE
-    // =====================
+    // TODO: Create a new container
     @Transactional
     public ResponseEntity<ContainerResponse> create(ContainerRequest request) {
 
@@ -64,9 +65,7 @@ public class ContainerService {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // =====================
-    // READ ALL
-    // =====================
+    // TODO: Retrieve all containers
     public ResponseEntity<List<ContainerResponse>> findAll() {
         List<ContainerResponse> list = containerRepository.findAll()
                 .stream()
@@ -82,9 +81,7 @@ public class ContainerService {
         return ResponseEntity.ok(list);
     }
 
-    // =====================
-    // READ BY ID
-    // =====================
+    // TODO: Get container by ID
     public ResponseEntity<ContainerResponse> findById(Long id) {
         Container c = containerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Container not found with ID: " + id));
@@ -101,9 +98,7 @@ public class ContainerService {
         return ResponseEntity.ok(response);
     }
 
-    // =====================
-    // UPDATE STATUS
-    // =====================
+    // TODO: Update container status
     /*
     @Transactional
     public ResponseEntity<ContainerResponse> updateStatus(Long id, String status) {
@@ -128,9 +123,7 @@ public class ContainerService {
         return ResponseEntity.ok(response);
     }*/
 
-    // =====================
-    // DELETE
-    // =====================
+    // TODO: Delete a container by ID
     @Transactional
     public ResponseEntity<String> delete(Long id) {
         if (!containerRepository.existsById(id)) {
