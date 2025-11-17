@@ -26,12 +26,11 @@ public class PaymentExpirationService {
     /**
      * Runs every 5 minutes and marks as FAILED any payment that:
      * - is currently in PENDING status, and
-     * - was created more than 30 minutes ago.
+     * - was created more than 31 minutes ago.
      */
     @Scheduled(fixedDelay = 5 * 60 * 1000)
     public void expireOldPendingPayments() {
-        LocalDateTime limit = LocalDateTime.now().minusMinutes(30);
-
+        LocalDateTime limit = LocalDateTime.now().minusMinutes(31);
         List<Payment> pendingPayments =
                 paymentRepository.findByStatusAndCreatedAtBefore(Payment.Status.PENDING, limit);
 

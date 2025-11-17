@@ -28,6 +28,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
     private final PaymentRepository paymentRepository;
+    private final EmailService emailService;
 
     /**
      * Processes user plan change by creating a payment preference.
@@ -160,6 +161,19 @@ public class PaymentService {
                 user.setPlan(payment.getPlan());
                 userRepository.save(user);
                 
+                // 6. Send plan purchase confirmation email
+                try {
+                    emailService.sendPlanPurchaseConfirmation(
+                            user.getEmail(),
+                            payment.getPlan().getName(),
+                            payment.getAmount(),
+                            payment.getPlan().getMaxInstances()
+                    );
+                } catch (Exception emailError) {
+                    log.error("Failed to send plan purchase email for user: {} but payment was successful", user.getId(), emailError);
+                    // Don't fail the payment if email fails - payment is already successful
+                }
+                
                 log.info("✅ PAYMENT APPROVED - Payment ID: {} - User: {} - Plan changed to: {}", 
                         paymentId, user.getId(), payment.getPlan().getId());
             } else {
@@ -169,7 +183,7 @@ public class PaymentService {
                         paymentId, mpStatus, payment.getUser().getId());
             }
 
-            // 6. Save status change
+            // 7. Save status change
             paymentRepository.save(payment);
 
         } catch (Exception e) {

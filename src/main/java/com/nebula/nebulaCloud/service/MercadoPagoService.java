@@ -39,6 +39,15 @@ public class MercadoPagoService {
     @Value("${application.base-url:http://localhost:8080}")
     private String baseUrl;
 
+    @Value("${application.payment.success-url:http://localhost:5173/payment/success}")
+    private String paymentSuccessUrl;
+
+    @Value("${application.payment.failure-url:http://localhost:5173/payment/failure}")
+    private String paymentFailureUrl;
+
+    @Value("${application.payment.pending-url:http://localhost:5173/payment/pending}")
+    private String paymentPendingUrl;
+
     /**
      * Initialize Mercado Pago SDK with access token.
      */
@@ -85,15 +94,13 @@ public class MercadoPagoService {
             
             // Create back URLs
             PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
-                    .success(baseUrl + "/api/v1/payments/success")
-                    .failure(baseUrl + "/api/v1/payments/failure")
-                    .pending(baseUrl + "/api/v1/payments/pending")
+                    .success(paymentSuccessUrl)
+                    .failure(paymentFailureUrl)
+                    .pending(paymentPendingUrl)
                     .build();
             
             log.debug("Creating preference with back URLs - Success: {}, Failure: {}, Pending: {}", 
-                    baseUrl + "/api/v1/payments/success",
-                    baseUrl + "/api/v1/payments/failure",
-                    baseUrl + "/api/v1/payments/pending");
+                    paymentSuccessUrl, paymentFailureUrl, paymentPendingUrl);
             
             // Configure payment methods
             // Allow multiple payment methods for Colombia
@@ -128,7 +135,7 @@ public class MercadoPagoService {
                     .paymentMethods(paymentMethods) // Allow multiple payment methods
                     .statementDescriptor("NebulaCloud Plan") // Name that appears on card statement
                     .externalReference("USER_" + userEmail + "_PLAN_" + plan.getId()) // Reference for tracking
-                    .expirationDateTo(OffsetDateTime.now().plusMinutes(29)) // 29 minutes from now
+                    .expirationDateTo(OffsetDateTime.now().plusMinutes(30)) // Mercado Pago requires minimum 30 minutes
                     .build();
             
             // Create preference
@@ -141,8 +148,8 @@ public class MercadoPagoService {
             return PaymentResponse.builder()
                     .preferenceId(preference.getId())
                     .initPoint(preference.getInitPoint())
-                    .successUrl(baseUrl + "/api/v1/payments/success")
-                    .failureUrl(baseUrl + "/api/v1/payments/failure")
+                    .successUrl(paymentSuccessUrl)
+                    .failureUrl(paymentFailureUrl)
                     .message("Preference created successfully")
                     .build();
 
