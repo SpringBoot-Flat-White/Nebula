@@ -36,5 +36,9 @@ public class AuthenticationResponse {
 
     private Long planId;
 
+    /**
+     * The name of the user's current plan.
+     */
+    private String plan;
 
 }

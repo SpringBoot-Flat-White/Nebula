@@ -48,14 +48,20 @@ public class SecurityConfig {
 
                 // 2. Configure authorization rules for HTTP requests.
                 .authorizeHttpRequests(auth -> auth
-                        // Public auth endpoints (no authentication required)
-                        .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/oauth2-test", "/api/v1/auth/test-response").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Public auth endpoints (no authentication required)
+                        .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/oauth2-test", "/api/v1/auth/test-response", "/api/v1/auth/complete-profile").permitAll()
                         // Protected auth endpoints (require authentication)
                         .requestMatchers("/api/v1/auth/logout", "/api/v1/auth/me", "/api/v1/auth/complete-profile").authenticated()
                         // Other public endpoints
                         .requestMatchers("/api/organizations/**","/api/individuals/**", "/v3/api-docs/**", "/swagger-ui/**","/swagger-ui.html", "/api/instances/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        // Mercado Pago webhook endpoint (public for notifications)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
+                        // Mercado Pago return URLs (public for redirection)
+                        .requestMatchers("/api/v1/payments/success", "/api/v1/payments/failure", "/api/v1/payments/pending").permitAll()
+                        // Authenticated endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                         // All other requests must be authenticated.
                         .anyRequest().authenticated()
                 )

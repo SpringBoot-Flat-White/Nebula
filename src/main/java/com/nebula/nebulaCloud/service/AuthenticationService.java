@@ -100,10 +100,13 @@ public class AuthenticationService {
                 .build();
 
         // 7. Build the response body DTO with user details (without the token)
+        String planName = (user.getPlan() != null) ? user.getPlan().getName() : "FREE";
+        
         AuthenticationResponse responseBody = AuthenticationResponse.builder()
                 .email(user.getEmail())
                 .fullName(individual.getFullName())
                 .userType(user.getUserType())
+                .plan(planName)
                 .build();
 
         // 8. Return the response with the cookie in the header and user details in the body
@@ -161,12 +164,15 @@ public class AuthenticationService {
                 .build();
 
         // 6. Build the response body DTO with user details, excluding the token.
+        String planName = (user.getPlan() != null) ? user.getPlan().getName() : "FREE";
+        
         AuthenticationResponse responseBody = AuthenticationResponse.builder()
                 .email(user.getEmail())
                 .fullName(fullName)
                 .userType(user.getUserType())
-                .planId(user.getPlan() != null ? user.getPlan().getId() : null)
+                .plan(planName)
                 .userId(user.getId())
+                .planId(user.getPlan().getId())
                 .build();
 
         // 7. Return the final ResponseEntity, adding the cookie to the headers and the DTO to the body.
@@ -252,6 +258,52 @@ public class AuthenticationService {
                 .message("Profile completed successfully")
                 .build();
 
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Gets the current authenticated user's information including updated plan.
+     *
+     * This method retrieves fresh data from the database to ensure
+     * the frontend has the latest information, especially after payment completion.
+     *
+     * @param authentication The Spring Security authentication object
+     * @return A {@link ResponseEntity} with the current user information
+     */
+    public ResponseEntity<AuthenticationResponse> getCurrentUser(
+            org.springframework.security.core.Authentication authentication
+    ) {
+        // Get the authenticated user from the principal
+        User user = (User) authentication.getPrincipal();
+        
+        // Fetch fresh data from database to get updated plan
+        User freshUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+        
+        // Get the full name from Individual or Organization
+        String fullName = "";
+        if (freshUser.getIndividual() != null) {
+            fullName = freshUser.getIndividual().getFullName();
+        } else if (freshUser.getOrganization() != null) {
+            fullName = freshUser.getOrganization().getName();
+        }
+        
+        // Get the plan name (default to FREE if no plan assigned)
+        String planName = "FREE";
+        if (freshUser.getPlan() != null) {
+            planName = freshUser.getPlan().getName();
+        }
+        
+        log.info("Fetched current user data: {} - Plan: {}", freshUser.getEmail(), planName);
+        
+        // Build response with updated information
+        AuthenticationResponse response = AuthenticationResponse.builder()
+                .email(freshUser.getEmail())
+                .fullName(fullName)
+                .userType(freshUser.getUserType())
+                .plan(planName)
+                .build();
+        
         return ResponseEntity.ok(response);
     }
 
