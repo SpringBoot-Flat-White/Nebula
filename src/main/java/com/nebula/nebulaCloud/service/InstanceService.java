@@ -4,10 +4,12 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
-import com.nebula.nebulaCloud.config.EngineConfig;
 import com.nebula.nebulaCloud.config.EngineDetails;
+import com.nebula.nebulaCloud.config.EngineConfig;
 import com.nebula.nebulaCloud.dto.InstanceRequest;
 import com.nebula.nebulaCloud.dto.InstanceResponse;
+import com.nebula.nebulaCloud.dto.InstanceUpdateRequest;
+import com.nebula.nebulaCloud.exception.*;
 import com.nebula.nebulaCloud.model.*;
 import com.nebula.nebulaCloud.repository.*;
 import com.nebula.nebulaCloud.utils.DatabaseCredentialGenerator;
@@ -45,7 +47,7 @@ public class InstanceService {
     public ResponseEntity<List<InstanceResponse>> getAllByUserId(Long userId) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         List<Instance> instances = instanceRepository.findByUser(user);
 
@@ -71,13 +73,13 @@ public class InstanceService {
     public ResponseEntity<List<InstanceResponse>> getAllByEngineId(Long userId, Long engineId) {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         Engine engine = engineRepository.findById(engineId)
-                .orElseThrow(() -> new RuntimeException("Engine not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Engine not found with ID: " + engineId));
 
         Container container = containerRepository.findByEngine(engine)
-            .orElseThrow(() -> new RuntimeException("Container not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Container not found for engine: " + engine.getName()));
 
         List<Instance> instances = instanceRepository.findByContainerAndUser(container, user);
 
@@ -122,21 +124,75 @@ public class InstanceService {
     }
 
     @Transactional
+    public ResponseEntity<InstanceResponse> updateInstance( InstanceUpdateRequest request) {
+        // Validar que el usuario existe
+        User user = userRepository.findById(request.getUser())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUser()));
+
+        // Validar que la instancia existe
+        Instance instance = instanceRepository.findById(request.getInstanceId())
+                .orElseThrow(() -> new ResourceNotFoundException("Instance not found with ID: " + request.getInstanceId()));
+
+        // Validar que la instancia pertenece al usuario
+        if (!instance.getUser().getId().equals(user.getId())) {
+            throw new UnauthorizedAccessException("Instance does not belong to this user");
+        }
+
+        // Validar que el estado es válido (solo SUSPENDED o RUNNING)
+        if (request.getStatus() != Instance.Status.SUSPENDED && request.getStatus() != Instance.Status.RUNNING) {
+            throw new InvalidStatusTransitionException("Invalid status. Only SUSPENDED or RUNNING are allowed");
+        }
+
+        // Si el estado no cambia, no hacer nada
+        if (instance.getStatus() == request.getStatus()) {
+            throw new InvalidStatusTransitionException("Instance is already in " + request.getStatus() + " status");
+        }
+
+        // Obtener información del motor y contenedor
+        Engine engine = instance.getContainer().getEngine();
+        String dbUser = instance.getUserDb().getDbUser();
+        String dbName = instance.getDatabaseName();
+
+        // Actualizar permisos en el motor de base de datos
+        updateDatabaseAccess(engine, dbName, dbUser, instance.getStatus().equals(Instance.Status.SUSPENDED)? Instance.Status.RUNNING : Instance.Status.SUSPENDED);
+
+        // Actualizar el estado de la instancia
+        instance.setStatus(instance.getStatus().equals(Instance.Status.SUSPENDED)? Instance.Status.RUNNING : Instance.Status.SUSPENDED);
+        instance.setUpdatedAt(LocalDateTime.now());
+        instanceRepository.save(instance);
+
+        // Construir respuesta
+        InstanceResponse response = InstanceResponse.builder()
+                .id(instance.getId())
+                .databaseName(instance.getDatabaseName())
+                .engineName(engine.getName())
+                .userId(instance.getUser().getId())
+                .containerId(instance.getContainer().getId())
+                .containerIp(instance.getContainer().getIp())
+                .containerPort(instance.getContainer().getPort())
+                .dbUsername(dbUser)
+                .createdAt(instance.getCreatedAt())
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    @Transactional
     public ResponseEntity<InstanceResponse> create(InstanceRequest request) {
 
         User user = userRepository.findById(request.getUser())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUser()));
 
         int userInstancesCount = instanceRepository.findByUser(user).size();
         if (userInstancesCount >= user.getPlan().getMaxInstances()) {
-            throw new RuntimeException("Instance limit reached for user plan");
+            throw new InstanceLimitExceededException("Instance limit reached for user plan. Maximum allowed: " + user.getPlan().getMaxInstances());
         }
 
         Engine engine = engineRepository.findById(request.getEngineId())
-                .orElseThrow(() -> new RuntimeException("Engine not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Engine not found with ID: " + request.getEngineId()));
 
         Container container = containerRepository.findByEngine(engine)
-                .orElseThrow(() -> new RuntimeException("No container available for engine: " + engine.getName()));
+                .orElseThrow(() -> new ResourceNotFoundException("No container available for engine: " + engine.getName()));
 
         String dbUser;
         String dbPassword;
@@ -150,14 +206,14 @@ public class InstanceService {
 
             Optional<Instance> existingDbNameFree = instanceRepository.findByDatabaseName(dbName);
             if (existingDbNameFree.isPresent()) {
-                throw new RuntimeException("dbName ya existe");
+                throw new DuplicateResourceException("Database name already exists: " + dbName);
             }
 
             Optional<UserDb> existingDbUserFree = userDbRepository.findByDbUser(dbUser);
             if (existingDbUserFree.isPresent()) {
                 // Verificar si el dbUser pertenece al usuario actual
                 if (!existingDbUserFree.get().getUser().getId().equals(user.getId())) {
-                    throw new RuntimeException("El userdb ya existe");
+                    throw new DuplicateResourceException("Database user already exists: " + dbUser);
                 }
             }
 
@@ -168,6 +224,7 @@ public class InstanceService {
                     .databaseName(dbName)
                     .container(container)
                     .user(user)
+                    .status(Instance.Status.RUNNING)
                     .createdAt(LocalDateTime.now())
                     .build();
 
@@ -187,6 +244,7 @@ public class InstanceService {
                     .databaseName(instanceFree.getDatabaseName())
                     .engineName(engine.getName())
                     .password(dbPassword)
+                    .dbUsername(dbUser)
                     .userId(instanceFree.getUser().getId())
                     .containerId(instanceFree.getContainer().getId())
                     .createdAt(instanceFree.getCreatedAt())
@@ -202,7 +260,7 @@ public class InstanceService {
         // Validar si el dbName ya existe
         Optional<Instance> existingDbName = instanceRepository.findByDatabaseName(cleanDbName);
         if (existingDbName.isPresent()) {
-            throw new RuntimeException("dbName ya existe");
+            throw new DuplicateResourceException("Database name already exists: " + cleanDbName);
         }
 
         // Validar si el dbUser ya existe
@@ -210,7 +268,7 @@ public class InstanceService {
         if (existingDbUser.isPresent()) {
             // Verificar si el dbUser pertenece al usuario actual
             if (!existingDbUser.get().getUser().getId().equals(user.getId())) {
-                throw new RuntimeException("El userdb ya existe");
+                throw new DuplicateResourceException("Database user already exists: " + cleanDbUser);
             }
         }
 
@@ -235,6 +293,7 @@ public class InstanceService {
                 .databaseName(dbName)
                 .container(container)
                 .user(user)
+                .status(Instance.Status.RUNNING)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -311,7 +370,8 @@ public class InstanceService {
             }
 
         } catch (Exception e) {
-            throw new RuntimeException("Error creating DB/user in " + engine.getName() + ": " + e.getMessage(), e);
+            log.error("Error creating database/user in {}: {}", engine.getName(), e.getMessage(), e);
+            throw new DatabaseOperationException("Error creating database/user in " + engine.getName() + ": " + e.getMessage(), e);
         }
     }
 
@@ -339,10 +399,17 @@ public class InstanceService {
 
             // Crear usuario solo si no existe (no cambiar la contraseña si ya existe)
             if (!userExists) {
+                // Crear usuario sin ningún privilegio global
                 stmt.execute("CREATE USER IF NOT EXISTS '" + dbUser + "'@'%' IDENTIFIED BY '" + dbPassword + "'");
+
+                // Bloquear que el usuario pueda cambiar su propia contraseña
+                // En MySQL, para evitar ALTER USER CURRENT_USER(), necesitamos asegurarnos
+                // que el usuario NO tenga privilegios globales que le permitan esto
+                // Primero revocamos TODOS los privilegios globales si existieran
+                stmt.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM '" + dbUser + "'@'%'");
             }
 
-            // Otorgar solo permisos de DML (datos) sin DDL (estructura)
+            // Otorgar solo permisos de DML (datos) sin DDL (estructura) A NIVEL DE BASE DE DATOS
             // SELECT, INSERT, UPDATE, DELETE para trabajar con datos
             // CREATE, INDEX para crear tablas e índices dentro de la BD
             // Sin DROP, ALTER, RENAME para que no pueda eliminar ni modificar la estructura de la BD
@@ -625,5 +692,199 @@ public class InstanceService {
         }
     }
 
+    private void updateDatabaseAccess(Engine engine, String dbName, String dbUser, Instance.Status status) {
+        try {
+            String engineName = engine.getName().toLowerCase();
+            EngineDetails conf = getEngineConfig(engineName);
+            System.out.println("hola " + conf.getHost() + conf.getPort() + conf.getRootUser() + conf.getRootPassword());
+
+            switch (engineName) {
+                case "mysql" -> updateMySQLAccess(conf, dbName, dbUser, status);
+                case "postgres" -> updatePostgresAccess(conf, dbName, dbUser, status);
+                case "sqlserver" -> updateSQLServerAccess(conf, dbName, dbUser, status);
+                case "mongodb" -> updateMongoDBAccess(conf, dbName, dbUser, status);
+                case "cassandra" -> updateCassandraAccess(conf, dbName, dbUser, status);
+                case "redis" -> updateRedisAccess(conf, dbUser, status);
+                default -> throw new UnsupportedOperationException("Engine not supported: " + engineName);
+            }
+
+        } catch (Exception e) {
+            log.error("Error updating access for {}: {}", engine.getName(), e.getMessage(), e);
+            throw new DatabaseOperationException("Error updating access for " + engine.getName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    private void updateMySQLAccess(EngineDetails conf, String dbName, String dbUser, Instance.Status status) throws Exception {
+        String url = "jdbc:mysql://" + conf.getHost() + ":" + conf.getPort() + "/?allowPublicKeyRetrieval=true&useSSL=false";
+        try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
+             Statement stmt = conn.createStatement()) {
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Revocar todos los permisos de la base de datos
+                stmt.execute("REVOKE ALL PRIVILEGES ON " + dbName + ".* FROM '" + dbUser + "'@'%'");
+                stmt.execute("FLUSH PRIVILEGES");
+            } else if (status == Instance.Status.RUNNING) {
+                // Restaurar permisos de DML y algunos DDL (sin DROP, ALTER, RENAME)
+                stmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, SHOW VIEW, CREATE VIEW ON " + dbName + ".* TO '" + dbUser + "'@'%'");
+                stmt.execute("FLUSH PRIVILEGES");
+            }
+        }
+    }
+
+    private void updatePostgresAccess(EngineDetails conf, String dbName, String dbUser, Instance.Status status) throws Exception {
+        String url = "jdbc:postgresql://" + conf.getHost() + ":" + conf.getPort() + "/postgres";
+        try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
+             Statement stmt = conn.createStatement()) {
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Revocar permiso de conexión a la base de datos
+                stmt.execute("REVOKE CONNECT ON DATABASE " + dbName + " FROM " + dbUser);
+
+                // Terminar todas las conexiones activas del usuario a esta base de datos
+                stmt.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+                        "WHERE datname = '" + dbName + "' AND usename = '" + dbUser + "'");
+            } else if (status == Instance.Status.RUNNING) {
+                // Restaurar permiso de conexión
+                stmt.execute("GRANT CONNECT ON DATABASE " + dbName + " TO " + dbUser);
+            }
+        }
+
+        // Si está activando (RUNNING), restaurar permisos en el schema
+        if (status == Instance.Status.RUNNING) {
+            String dbUrl = "jdbc:postgresql://" + conf.getHost() + ":" + conf.getPort() + "/" + dbName;
+            try (Connection dbConn = DriverManager.getConnection(dbUrl, conf.getRootUser(), conf.getRootPassword());
+                 Statement dbStmt = dbConn.createStatement()) {
+
+                // Restaurar permisos en el schema public
+                dbStmt.execute("GRANT USAGE, CREATE ON SCHEMA public TO " + dbUser);
+                dbStmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + dbUser);
+                dbStmt.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + dbUser);
+            }
+        }
+    }
+
+    private void updateSQLServerAccess(EngineDetails conf, String dbName, String dbUser, Instance.Status status) throws Exception {
+        log.info("Updating SQL Server access - DB: {}, User: {}, Status: {}", dbName, dbUser, status);
+        log.debug("SQL Server config - Host: {}, Port: {}, RootUser: {}", conf.getHost(), conf.getPort(), conf.getRootUser());
+
+        // Conectarse primero a la base de datos master con las credenciales de root
+        String masterUrl = "jdbc:sqlserver://" + conf.getHost() + ":" + conf.getPort() +
+                ";databaseName=master;encrypt=true;trustServerCertificate=true";
+
+        log.debug("Attempting to connect to master database: {}", masterUrl);
+
+        try (Connection masterConn = DriverManager.getConnection(masterUrl, conf.getRootUser(), conf.getRootPassword());
+             Statement masterStmt = masterConn.createStatement()) {
+
+            log.info("Successfully connected to SQL Server master database");
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Matar conexiones activas del usuario a la base de datos específica
+                log.info("Killing active sessions for user {} in database {}", dbUser, dbName);
+                masterStmt.execute(String.format(
+                    "USE master; " +
+                    "DECLARE @kill varchar(8000) = ''; " +
+                    "SELECT @kill = @kill + 'KILL ' + CONVERT(varchar(5), session_id) + ';' " +
+                    "FROM sys.dm_exec_sessions " +
+                    "WHERE login_name = '%s' AND database_id = DB_ID('%s'); " +
+                    "EXEC(@kill);",
+                    dbUser, dbName
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Failed to connect to SQL Server master database: {}", e.getMessage(), e);
+            throw new RuntimeException("Cannot connect to SQL Server master database. Please verify credentials: " + e.getMessage(), e);
+        }
+
+        // Ahora conectarse a la base de datos específica para cambiar permisos
+        String dbUrl = "jdbc:sqlserver://" + conf.getHost() + ":" + conf.getPort() +
+                ";databaseName=" + dbName + ";encrypt=true;trustServerCertificate=true";
+
+        log.debug("Attempting to connect to database: {}", dbUrl);
+
+        try (Connection conn = DriverManager.getConnection(dbUrl, conf.getRootUser(), conf.getRootPassword());
+             Statement stmt = conn.createStatement()) {
+
+            log.info("Successfully connected to SQL Server database: {}", dbName);
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Revocar todos los roles y permisos
+                log.info("Suspending user {} - Removing roles and denying access", dbUser);
+                stmt.execute(String.format("ALTER ROLE db_datareader DROP MEMBER [%s]", dbUser));
+                stmt.execute(String.format("ALTER ROLE db_datawriter DROP MEMBER [%s]", dbUser));
+                stmt.execute(String.format("ALTER ROLE db_ddladmin DROP MEMBER [%s]", dbUser));
+
+                // Denegar conexión
+                stmt.execute(String.format("DENY CONNECT TO [%s]", dbUser));
+                log.info("User {} suspended successfully", dbUser);
+
+            } else if (status == Instance.Status.RUNNING) {
+                // Restaurar permiso de conexión
+                log.info("Activating user {} - Granting access and restoring roles", dbUser);
+                stmt.execute(String.format("GRANT CONNECT TO [%s]", dbUser));
+
+                // Restaurar roles
+                stmt.execute(String.format("ALTER ROLE db_datareader ADD MEMBER [%s]", dbUser));
+                stmt.execute(String.format("ALTER ROLE db_datawriter ADD MEMBER [%s]", dbUser));
+                stmt.execute(String.format("ALTER ROLE db_ddladmin ADD MEMBER [%s]", dbUser));
+                log.info("User {} activated successfully", dbUser);
+            }
+        } catch (Exception e) {
+            log.error("Failed to update permissions in database {}: {}", dbName, e.getMessage(), e);
+            throw new RuntimeException("Cannot update permissions in database " + dbName + ": " + e.getMessage(), e);
+        }
+    }
+
+    private void updateMongoDBAccess(EngineDetails conf, String dbName, String dbUser, Instance.Status status) {
+        String uri = "mongodb://" + conf.getRootUser() + ":" + conf.getRootPassword() + "@" + conf.getHost() + ":" + conf.getPort() + "/admin";
+        try (MongoClient mongoClient = MongoClients.create(uri)) {
+            MongoDatabase adminDb = mongoClient.getDatabase("admin");
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Revocar roles del usuario
+                adminDb.runCommand(new org.bson.Document("updateUser", dbUser)
+                        .append("roles", java.util.List.of()));
+            } else if (status == Instance.Status.RUNNING) {
+                // Restaurar rol de lectura/escritura
+                adminDb.runCommand(new org.bson.Document("updateUser", dbUser)
+                        .append("roles", java.util.List.of(
+                                new org.bson.Document("role", "readWrite").append("db", dbName)
+                        )));
+            }
+        }
+    }
+
+    private void updateCassandraAccess(EngineDetails conf, String keyspace, String dbUser, Instance.Status status) {
+        try (CqlSession session = CqlSession.builder()
+                .addContactPoint(new InetSocketAddress(conf.getHost(), conf.getPort()))
+                .withAuthCredentials(conf.getRootUser(), conf.getRootPassword())
+                .withLocalDatacenter("datacenter1")
+                .build()) {
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Revocar todos los permisos en el keyspace
+                session.execute("REVOKE ALL PERMISSIONS ON KEYSPACE " + keyspace + " FROM " + dbUser);
+            } else if (status == Instance.Status.RUNNING) {
+                // Restaurar permisos
+                session.execute("GRANT ALL PERMISSIONS ON KEYSPACE " + keyspace + " TO " + dbUser);
+            }
+        }
+    }
+
+    private void updateRedisAccess(EngineDetails conf, String dbUser, Instance.Status status) {
+        try (Jedis jedis = new Jedis(conf.getHost(), conf.getPort())) {
+            jedis.auth(conf.getRootPassword());
+
+            if (status == Instance.Status.SUSPENDED) {
+                // Deshabilitar el usuario
+                jedis.aclSetUser("user_" + dbUser, "off");
+            } else if (status == Instance.Status.RUNNING) {
+                // Habilitar el usuario
+                jedis.aclSetUser("user_" + dbUser, "on");
+            }
+        }
+    }
+
 
 }
+

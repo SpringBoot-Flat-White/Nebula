@@ -2,6 +2,7 @@ package com.nebula.nebulaCloud.controller;
 
 import com.nebula.nebulaCloud.dto.InstanceRequest;
 import com.nebula.nebulaCloud.dto.InstanceResponse;
+import com.nebula.nebulaCloud.dto.InstanceUpdateRequest;
 import com.nebula.nebulaCloud.service.InstanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -34,5 +35,10 @@ public class InstanceController {
     @GetMapping("/{userId}/{engineId}")
     public ResponseEntity<List<InstanceResponse>> getAllByEngineId(@PathVariable Long userId, @PathVariable Long engineId) {
         return instanceService.getAllByEngineId(userId, engineId);
+    }
+
+    @PutMapping
+    public ResponseEntity<InstanceResponse> updateInstance(@RequestBody InstanceUpdateRequest request) {
+        return instanceService.updateInstance(request);
     }
 }
