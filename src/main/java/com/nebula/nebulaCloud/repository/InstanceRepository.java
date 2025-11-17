@@ -27,6 +27,11 @@ public interface InstanceRepository extends JpaRepository<Instance, Long> {
     List<Instance> findByContainerAndUser(Container container, User user);
 
     /**
+     * Find instance by database name.
+     */
+    Optional<Instance> findByDatabaseName(String databaseName);
+
+    /**
      * Find instance by ID and user (for security).
      */
     Optional<Instance> findByIdAndUser(Long id, User user);

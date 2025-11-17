@@ -2,6 +2,8 @@ package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.dto.ContainerRequest;
 import com.nebula.nebulaCloud.dto.ContainerResponse;
+import com.nebula.nebulaCloud.exception.DuplicateResourceException;
+import com.nebula.nebulaCloud.exception.ResourceNotFoundException;
 import com.nebula.nebulaCloud.model.Container;
 import com.nebula.nebulaCloud.model.Engine;
 import com.nebula.nebulaCloud.repository.ContainerRepository;
@@ -16,6 +18,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing database containers.
+ */
 @Service
 @RequiredArgsConstructor
 public class ContainerService {
@@ -23,19 +28,17 @@ public class ContainerService {
     private final ContainerRepository containerRepository;
     private final EngineRepository engineRepository;
 
-    // =====================
-    // CREATE
-    // =====================
+    // TODO: Create a new container
     @Transactional
     public ResponseEntity<ContainerResponse> create(ContainerRequest request) {
 
         Engine engine = engineRepository.findById(request.getEngineId()).orElseThrow(
-                () -> new RuntimeException("Engine not found")
+                () -> new ResourceNotFoundException("Engine not found with ID: " + request.getEngineId())
         );
 
-        // Validar si ya existe el contenedor por nombre
+        // Validar si ya existe el contenedor por engine
         containerRepository.findByEngine(engine).ifPresent(c -> {
-            throw new IllegalStateException("Container with name '" + engine + "' already exists.");
+            throw new DuplicateResourceException("Container for engine '" + engine.getName() + "' already exists");
         });
 
 
@@ -62,9 +65,7 @@ public class ContainerService {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // =====================
-    // READ ALL
-    // =====================
+    // TODO: Retrieve all containers
     public ResponseEntity<List<ContainerResponse>> findAll() {
         List<ContainerResponse> list = containerRepository.findAll()
                 .stream()
@@ -80,12 +81,10 @@ public class ContainerService {
         return ResponseEntity.ok(list);
     }
 
-    // =====================
-    // READ BY ID
-    // =====================
+    // TODO: Get container by ID
     public ResponseEntity<ContainerResponse> findById(Long id) {
         Container c = containerRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Container not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Container not found with ID: " + id));
 
         ContainerResponse response = ContainerResponse.builder()
                 .id(c.getId())
@@ -99,9 +98,7 @@ public class ContainerService {
         return ResponseEntity.ok(response);
     }
 
-    // =====================
-    // UPDATE STATUS
-    // =====================
+    // TODO: Update container status
     /*
     @Transactional
     public ResponseEntity<ContainerResponse> updateStatus(Long id, String status) {
@@ -126,13 +123,11 @@ public class ContainerService {
         return ResponseEntity.ok(response);
     }*/
 
-    // =====================
-    // DELETE
-    // =====================
+    // TODO: Delete a container by ID
     @Transactional
     public ResponseEntity<String> delete(Long id) {
         if (!containerRepository.existsById(id)) {
-            throw new RuntimeException("Container not found");
+            throw new ResourceNotFoundException("Container not found with ID: " + id);
         }
         containerRepository.deleteById(id);
         return ResponseEntity.ok("Container deleted successfully");

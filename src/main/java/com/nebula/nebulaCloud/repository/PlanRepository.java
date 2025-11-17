@@ -11,7 +11,7 @@ import java.util.Optional;
  */
 @Repository
 public interface PlanRepository extends JpaRepository<Plan, Long> {
-    
+
     /**
      * Busca un plan por su nombre.
      */

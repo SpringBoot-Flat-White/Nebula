@@ -47,7 +47,7 @@ public class RegisterRequest {
     /**
      * The optional ID of the plan to which the user is subscribing upon registration.
      */
-    private Long planId;
+    private Long planId = 1L;
 
     /**
      * The full name of the user.

@@ -6,7 +6,9 @@ import com.nebula.nebulaCloud.dto.CompleteProfileRequest;
 import com.nebula.nebulaCloud.dto.CompleteProfileResponse;
 import com.nebula.nebulaCloud.dto.RegisterRequest;
 import com.nebula.nebulaCloud.model.Individual;
+import com.nebula.nebulaCloud.model.Plan;
 import com.nebula.nebulaCloud.model.User;
+import com.nebula.nebulaCloud.repository.PlanRepository;
 import com.nebula.nebulaCloud.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final PlanRepository planRepository;
     // IndividualRepository no es necesario aquí si se usa Cascade.ALL
 
     /**
@@ -60,12 +63,16 @@ public class AuthenticationService {
             throw new IllegalStateException("User with email " + request.getEmail() + " already exists.");
         });
 
+        Plan plan = planRepository.findById(request.getPlanId())
+                .orElseThrow(() -> new IllegalStateException("Plan not found with id: " + request.getPlanId()));
+
         // 1. Create a new user entity from the request
         User user = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .userType(request.getUserType())
                 .provider("local") // Traditional registration
+                .plan(plan)
                 .profileCompleted(true) // Profile is complete on traditional registration
                 .build();
 

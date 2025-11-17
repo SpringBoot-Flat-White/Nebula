@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 
 /**
- * Data Transfer Object for creating a new instance.
+ * DTO for creating a new database instance.
  */
 @Data
 @NoArgsConstructor
@@ -14,25 +14,23 @@ import lombok.*;
 @Builder
 public class InstanceRequest {
 
+    // TODO: User ID who owns the instance
     @NotNull(message = "User ID is required")
     private Long user;
 
-    @NotNull(message = "Container ID is required")
-    private Long containerId;
-
+    // TODO: Database engine type ID
     @NotNull(message = "Engine ID is required")
     private Long engineId;
 
-    @NotBlank(message = "Database name is required")
+    // TODO: Name of the database to create
     private String databaseName;
 
-    @NotBlank(message = "Username is required")
+    // TODO: Database username
     @Size(max = 100, message = "Username must be at most 100 characters")
     private String dbUser;
 
-    /*
-    @NotBlank(message = "Encrypted database password is required")
+    // TODO: Encrypted database password
     @Size(max = 255, message = "Encrypted password must be at most 255 characters")
-    private String dbPasswordEnc;*/
+    private String dbPasswordEnc;
 
 }

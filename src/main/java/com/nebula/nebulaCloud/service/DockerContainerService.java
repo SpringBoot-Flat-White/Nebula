@@ -6,10 +6,14 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+/**
+ * Service for managing Docker containers.
+ */
 @Service
 @Slf4j
 public class DockerContainerService {
 
+    // TODO: Execute Docker command and return output
     private String executeCommand(String... command) {
         StringBuilder output = new StringBuilder();
         try {
@@ -37,42 +41,32 @@ public class DockerContainerService {
         return output.toString().trim();
     }
 
-    // ======================
-    // CREATE CONTAINER
-    // ======================
+    // TODO: Create a new Docker container
     public String createContainer(String name, String image, int port) {
         String command = String.format("docker run -d --name %s -p %d:%d %s", name, port, port, image);
         log.info("Creating container: {}", command);
         return executeCommand("bash", "-c", command);
     }
 
-    // ======================
-    // START CONTAINER
-    // ======================
+    // TODO: Start an existing container
     public String startContainer(String name) {
         log.info("Starting container {}", name);
         return executeCommand("bash", "-c", "docker start " + name);
     }
 
-    // ======================
-    // STOP CONTAINER
-    // ======================
+    // TODO: Stop a running container
     public String stopContainer(String name) {
         log.info("Stopping container {}", name);
         return executeCommand("bash", "-c", "docker stop " + name);
     }
 
-    // ======================
-    // REMOVE CONTAINER
-    // ======================
+    // TODO: Remove a container
     public String removeContainer(String name) {
         log.info("Removing container {}", name);
         return executeCommand("bash", "-c", "docker rm -f " + name);
     }
 
-    // ======================
-    // LIST CONTAINERS
-    // ======================
+    // TODO: List all containers (running or all)
     public String listContainers(boolean all) {
         String flag = all ? "-a" : "";
         return executeCommand("bash", "-c", "docker ps " + flag);

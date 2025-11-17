@@ -48,7 +48,7 @@ public class SecurityConfig {
 
                 // 2. Configure authorization rules for HTTP requests.
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()        
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // Public auth endpoints (no authentication required)
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/oauth2-test", "/api/v1/auth/test-response", "/api/v1/auth/complete-profile").permitAll()
                         // Protected auth endpoints (require authentication)
