@@ -2,6 +2,7 @@ package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.dto.UserDbRequest;
 import com.nebula.nebulaCloud.dto.UserDbResponse;
+import com.nebula.nebulaCloud.exception.ResourceNotFoundException;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.model.UserDb;
 import com.nebula.nebulaCloud.repository.UserDbRepository;
@@ -24,7 +25,7 @@ public class UserDbService {
 
     public ResponseEntity<UserDbResponse> create(UserDbRequest request) {
         User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUserId()));
 
         UserDb userDb = UserDb.builder()
                 .dbUser(request.getDbUser())
@@ -43,7 +44,7 @@ public class UserDbService {
 
     public ResponseEntity<List<UserDbResponse>> getByUser(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         List<UserDbResponse> list = userDbRepository.findByUser(user).stream()
                 .map(db -> UserDbResponse.builder()

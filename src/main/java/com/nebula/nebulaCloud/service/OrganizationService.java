@@ -4,6 +4,8 @@ import com.nebula.nebulaCloud.dto.AuthenticationResponse;
 import com.nebula.nebulaCloud.dto.OrganizationRequest;
 import com.nebula.nebulaCloud.dto.OrganizationResponse;
 import com.nebula.nebulaCloud.dto.RegisterRequest;
+import com.nebula.nebulaCloud.exception.DuplicateResourceException;
+import com.nebula.nebulaCloud.exception.ResourceNotFoundException;
 import com.nebula.nebulaCloud.model.Individual;
 import com.nebula.nebulaCloud.model.Organization;
 import com.nebula.nebulaCloud.model.User;
@@ -38,11 +40,11 @@ public class OrganizationService {
 
         // Check if user already exists
         userRepository.findByEmail(request.getEmail()).ifPresent(u -> {
-            throw new IllegalStateException("User with email " + request.getEmail() + " already exists.");
+            throw new DuplicateResourceException("User with email '" + request.getEmail() + "' already exists");
         });
 
         Individual owner = individualRepository.findById(request.getOwnerId())
-                .orElseThrow(() -> new RuntimeException("Owner not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Owner not found with ID: " + request.getOwnerId()));
                 //User user = userRepository.findById(request.getUserId())
                 //.orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -108,7 +110,7 @@ public class OrganizationService {
 
     public OrganizationResponse findById(Long id) {
         Organization org = organizationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found with ID: " + id));
         return OrganizationResponse.builder()
                 .id(org.getId())
                 .name(org.getName())
@@ -120,7 +122,7 @@ public class OrganizationService {
 
     public void delete(Long id) {
         if (!organizationRepository.existsById(id)) {
-            throw new RuntimeException("Organization not found");
+            throw new ResourceNotFoundException("Organization not found with ID: " + id);
         }
         organizationRepository.deleteById(id);
     }

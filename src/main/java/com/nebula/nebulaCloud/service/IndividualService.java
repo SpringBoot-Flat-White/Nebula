@@ -2,6 +2,7 @@ package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.dto.IndividualRequest;
 import com.nebula.nebulaCloud.dto.IndividualResponse;
+import com.nebula.nebulaCloud.exception.ResourceNotFoundException;
 import com.nebula.nebulaCloud.model.Individual;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.repository.IndividualRepository;
@@ -21,7 +22,7 @@ public class IndividualService {
 
     public IndividualResponse create(IndividualRequest request) {
         User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + request.getUserId()));
 
         Individual individual = Individual.builder()
                 .fullName(request.getFullName())
@@ -50,7 +51,7 @@ public class IndividualService {
 
     public IndividualResponse findById(Long id) {
         Individual i = individualRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Individual not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Individual not found with ID: " + id));
 
         return IndividualResponse.builder()
                 .id(i.getId())
@@ -61,7 +62,7 @@ public class IndividualService {
 
     public void delete(Long id) {
         if (!individualRepository.existsById(id)) {
-            throw new RuntimeException("Individual not found");
+            throw new ResourceNotFoundException("Individual not found with ID: " + id);
         }
         individualRepository.deleteById(id);
     }

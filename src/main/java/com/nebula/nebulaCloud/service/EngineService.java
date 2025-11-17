@@ -1,5 +1,7 @@
 package com.nebula.nebulaCloud.service;
 
+import com.nebula.nebulaCloud.exception.DuplicateResourceException;
+import com.nebula.nebulaCloud.exception.ResourceNotFoundException;
 import com.nebula.nebulaCloud.model.Engine;
 import com.nebula.nebulaCloud.repository.EngineRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +32,7 @@ public class EngineService {
     public ResponseEntity<Engine> create(String request) {
         engineRepository.findByName(request.toUpperCase())
                 .ifPresent(e -> {
-                    throw new IllegalStateException("Engine '" + request + "' already exists.");
+                    throw new DuplicateResourceException("Engine '" + request + "' already exists");
                 });
 
         // Crear contenedor físico del motor si no existe
@@ -64,7 +66,7 @@ public class EngineService {
 
     public ResponseEntity<Void> delete(Long id) {
         Engine engine = engineRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Engine not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Engine not found with ID: " + id));
 
         /*
         // Detener y eliminar contenedor Docker físico
