@@ -1,6 +1,5 @@
 package com.nebula.nebulaCloud.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
@@ -29,8 +28,8 @@ public class InstanceRequest {
     @Size(max = 100, message = "Username must be at most 100 characters")
     private String dbUser;
 
-    // TODO: Encrypted database password
-    @Size(max = 255, message = "Encrypted password must be at most 255 characters")
-    private String dbPasswordEnc;
+    // TODO: Database password (plain text, will be encrypted before saving)
+    @Size(max = 255, message = "Password must be at most 255 characters")
+    private String dbPassword;
 
 }
