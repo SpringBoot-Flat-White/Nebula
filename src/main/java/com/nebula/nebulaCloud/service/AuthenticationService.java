@@ -107,6 +107,8 @@ public class AuthenticationService {
                 .fullName(individual.getFullName())
                 .userType(user.getUserType())
                 .plan(planName)
+                .userId(user.getId())
+                .planId(user.getPlan() != null ? user.getPlan().getId() : null)
                 .build();
 
         // 8. Return the response with the cookie in the header and user details in the body
@@ -354,6 +356,7 @@ public class AuthenticationService {
                 .userType(user.getUserType())
                 .userId(user.getId())
                 .planId(user.getPlan() != null ? user.getPlan().getId() : null)
+                .plan(user.getPlan() != null ? user.getPlan().getName() : "FREE")
                 .build();
 
         return ResponseEntity.ok(response);
