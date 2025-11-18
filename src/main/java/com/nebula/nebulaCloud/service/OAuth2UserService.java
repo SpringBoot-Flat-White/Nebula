@@ -1,8 +1,10 @@
 package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.model.Individual;
+import com.nebula.nebulaCloud.model.Plan;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.model.UserType;
+import com.nebula.nebulaCloud.repository.PlanRepository;
 import com.nebula.nebulaCloud.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,7 @@ import java.util.Optional;
 public class OAuth2UserService extends DefaultOAuth2UserService {
 
     private final UserRepository userRepository;
+    private final PlanRepository planRepository;
 
     @Override
     @Transactional
@@ -83,6 +86,12 @@ public class OAuth2UserService extends DefaultOAuth2UserService {
                 );
             }
 
+            // Get default plan (ID = 1)
+            Plan defaultPlan = planRepository.findById(1L)
+                .orElseThrow(() -> new OAuth2AuthenticationException(
+                    "Default plan not found. Please contact administrator."
+                ));
+
             // Create new user
             user = User.builder()
                 .email(email)
@@ -91,6 +100,7 @@ public class OAuth2UserService extends DefaultOAuth2UserService {
                 .provider(provider)
                 .providerId(providerId)
                 .profileCompleted(false) // Must complete profile
+                .plan(defaultPlan) // Assign default plan (ID = 1)
                 .build();
 
             // Create associated Individual with OAuth2 name (can be "xxgamexx")
@@ -102,7 +112,8 @@ public class OAuth2UserService extends DefaultOAuth2UserService {
             user.setIndividual(individual);
             user = userRepository.save(user);
 
-            log.info("New OAuth2 user created: {}", user.getEmail());
+            log.info("New OAuth2 user created: {} with ID: {}, Plan ID: {}",
+                user.getEmail(), user.getId(), user.getPlan().getId());
         }
 
         // Return custom OAuth2User implementation that wraps our User entity

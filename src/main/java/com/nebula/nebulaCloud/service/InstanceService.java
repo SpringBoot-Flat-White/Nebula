@@ -253,6 +253,8 @@ public class InstanceService {
                     .dbUsername(dbUser)
                     .userId(instanceFree.getUser().getId())
                     .containerId(instanceFree.getContainer().getId())
+                    .containerIp(instanceFree.getContainer().getIp())
+                    .containerPort(instanceFree.getContainer().getPort())
                     .createdAt(instanceFree.getCreatedAt())
                     .build();
 

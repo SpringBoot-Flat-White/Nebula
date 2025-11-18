@@ -43,6 +43,15 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         User user = oAuth2User.getUser();
 
         log.info("OAuth2 authentication successful for user: {}", user.getEmail());
+        log.info("User details - ID: {}, Email: {}, ProfileCompleted: {}, PlanId: {}",
+            user.getId(), user.getEmail(), user.getProfileCompleted(),
+            user.getPlan() != null ? user.getPlan().getId() : null);
+
+        // Validate that user has an ID (should never be null after save)
+        if (user.getId() == null) {
+            log.error("CRITICAL: User ID is null for user: {}", user.getEmail());
+            throw new IllegalStateException("User ID cannot be null after authentication");
+        }
 
         // Generate JWT token
         String jwtToken = jwtService.generateToken(user);
@@ -69,26 +78,23 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             fullName = userEmail.contains("@") ? userEmail.substring(0, userEmail.indexOf("@")) : userEmail;
         }
 
-        // Get planId if exists
+        // Get planId (should always exist with default plan)
         Long planId = (user.getPlan() != null) ? user.getPlan().getId() : null;
 
-        // Build redirect URL with ALL user data in JSON format
-        UriComponentsBuilder urlBuilder = UriComponentsBuilder.fromUriString(redirectUrl)
+        // Build redirect URL with ALL user data (including userId and planId always)
+        String targetUrl = UriComponentsBuilder.fromUriString(redirectUrl)
             .queryParam("profileCompleted", user.getProfileCompleted())
             .queryParam("email", user.getEmail())
             .queryParam("fullName", fullName)
             .queryParam("userType", user.getUserType().name())
-            .queryParam("userId", user.getId());
+            .queryParam("userId", user.getId())
+            .queryParam("planId", planId)
+            .build()
+            .toUriString();
 
-        // Add planId only if it exists
-        if (planId != null) {
-            urlBuilder.queryParam("planId", planId);
-        }
-
-        String targetUrl = urlBuilder.build().toUriString();
-
-        log.info("Redirecting to: {} with user data - userId: {}, userType: {}, planId: {}",
-                 targetUrl, user.getId(), user.getUserType(), planId);
+        log.info("Redirecting to: {}", targetUrl);
+        log.info("Sent data - userId: {}, email: {}, userType: {}, planId: {}, profileCompleted: {}",
+                 user.getId(), user.getEmail(), user.getUserType(), planId, user.getProfileCompleted());
 
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
