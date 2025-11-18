@@ -65,6 +65,7 @@ public class InstanceService {
                 .containerIp(instance.getContainer().getIp())
                 .containerPort(instance.getContainer().getPort())
                 .engineName(instance.getContainer().getEngine().getName())
+                .status(instance.getStatus().name())
 
                 .dbUsername(instance.getUserDb().getDbUser())
 
@@ -92,11 +93,11 @@ public class InstanceService {
                 .databaseName(instance.getDatabaseName())
                 .createdAt(instance.getCreatedAt())
 
-
                 .containerId(instance.getContainer().getId())
                 .containerIp(instance.getContainer().getIp())
                 .containerPort(instance.getContainer().getPort())
                 .engineName(instance.getContainer().getEngine().getName())
+                .status(instance.getStatus().name())
 
                 .dbUsername(instance.getUserDb().getDbUser())
 
@@ -270,7 +271,7 @@ public class InstanceService {
         // Validar si el dbUser ya existe
         Optional<UserDb> existingDbUser = userDbRepository.findByDbUser(cleanDbUser);
         if (existingDbUser.isPresent()) {
-            // Verificar si el dbUser pertenece al usuario actual
+
             if (!existingDbUser.get().getUser().getId().equals(user.getId())) {
                 throw new DuplicateResourceException("Database user already exists: " + cleanDbUser);
             }
@@ -280,14 +281,17 @@ public class InstanceService {
         boolean userExists = false;
 
         if (existingDbUser.isPresent() && existingDbUser.get().getUser().getId().equals(user.getId())) {
-            // Reutilizar credenciales existentes del usuario
+
             userExists = true;
             dbUser = existingDbUser.get().getDbUser();
-            dbPassword = null; // No necesitamos la contraseña en texto plano
+            dbPassword = null;
         } else {
-            // Crear nuevas credenciales
+
             dbUser = cleanDbUser;
-            dbPassword = "pass_" + user.getId() + UUID.randomUUID().toString().substring(0, 8);
+
+            dbPassword = (request.getDbPassword() != null && !request.getDbPassword().trim().isEmpty())
+                    ? request.getDbPassword()
+                    : "pass_" + user.getId() + UUID.randomUUID().toString().substring(0, 8);
         }
 
         createDatabaseAndUser(engine, dbName, dbUser, dbPassword, userExists);
@@ -333,13 +337,15 @@ public class InstanceService {
                 .id(instance.getId())
                 .databaseName(instance.getDatabaseName())
                 .engineName(engine.getName())
-                .password(dbPassword != null ? dbPassword : dbPassword + " -ya existe") // Si es usuario existente, no mostramos la contraseña
+                .dbUsername(instance.getUserDb().getDbUser())
+                .containerIp(instance.getContainer().getIp())
+                .status(instance.getStatus().name())
+                .containerPort(instance.getContainer().getPort())
+                .password(dbPassword != null ? dbPassword : "Usuario existente - usando credenciales anteriores") // Si es usuario existente, no mostramos la contraseña
                 .userId(instance.getUser().getId())
                 .containerId(instance.getContainer().getId())
                 .createdAt(instance.getCreatedAt())
                 .build();
-
-
 
         return ResponseEntity.ok(response);
     }
