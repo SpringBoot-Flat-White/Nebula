@@ -1,8 +1,6 @@
 package com.nebula.nebulaCloud.controller;
 
-import com.nebula.nebulaCloud.dto.InstanceRequest;
-import com.nebula.nebulaCloud.dto.InstanceResponse;
-import com.nebula.nebulaCloud.dto.InstanceUpdateRequest;
+import com.nebula.nebulaCloud.dto.*;
 import com.nebula.nebulaCloud.service.InstanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -48,5 +46,23 @@ public class InstanceController {
     @PutMapping
     public ResponseEntity<InstanceResponse> updateInstance(@RequestBody InstanceUpdateRequest request) {
         return instanceService.updateInstance(request);
+    }
+
+    // TODO: Get statistics - databases created today
+    @GetMapping("/stats/today")
+    public ResponseEntity<DatabaseStatsResponse> getDatabasesCreatedToday() {
+        return instanceService.getDatabasesCreatedToday();
+    }
+
+    // TODO: Get statistics - total databases
+    @GetMapping("/stats/total")
+    public ResponseEntity<DatabaseStatsResponse> getTotalDatabases() {
+        return instanceService.getTotalDatabases();
+    }
+
+    // TODO: Get statistics - databases by engine
+    @GetMapping("/stats/by-engine")
+    public ResponseEntity<List<DatabaseStatsByEngineResponse>> getDatabasesByEngine() {
+        return instanceService.getDatabasesByEngine();
     }
 }

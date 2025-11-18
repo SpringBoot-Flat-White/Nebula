@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,5 +61,26 @@ public interface InstanceRepository extends JpaRepository<Instance, Long> {
            "LEFT JOIN FETCH i.user " +
            "WHERE i.id = :id")
     Optional<Instance> findByIdWithDetails(@Param("id") Long id);
+
+    /**
+     * Count instances created on a specific date range.
+     */
+    @Query("SELECT COUNT(i) FROM Instance i WHERE i.createdAt BETWEEN :startDate AND :endDate")
+    Long countByCreatedAtBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Count total instances.
+     */
+    @Query("SELECT COUNT(i) FROM Instance i")
+    Long countTotal();
+
+    /**
+     * Count instances by engine name.
+     */
+    @Query("SELECT c.engine.name, COUNT(i) FROM Instance i " +
+           "JOIN i.container c " +
+           "GROUP BY c.engine.name " +
+           "ORDER BY COUNT(i) DESC")
+    List<Object[]> countByEngine();
 }
 

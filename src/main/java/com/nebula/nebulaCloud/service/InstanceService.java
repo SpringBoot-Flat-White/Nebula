@@ -6,9 +6,7 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import com.nebula.nebulaCloud.config.EngineDetails;
 import com.nebula.nebulaCloud.config.EngineConfig;
-import com.nebula.nebulaCloud.dto.InstanceRequest;
-import com.nebula.nebulaCloud.dto.InstanceResponse;
-import com.nebula.nebulaCloud.dto.InstanceUpdateRequest;
+import com.nebula.nebulaCloud.dto.*;
 import com.nebula.nebulaCloud.exception.*;
 import com.nebula.nebulaCloud.model.*;
 import com.nebula.nebulaCloud.repository.*;
@@ -25,10 +23,13 @@ import java.net.InetSocketAddress;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing database instances.
@@ -355,9 +356,9 @@ public class InstanceService {
             String engineName = engine.getName().toLowerCase();
             EngineDetails conf = getEngineConfig(engineName);
 
-            // Obtener todas las BD que ya pertenecen a este usuario (para PostgreSQL)
+            // Obtener todas las BD que ya pertenecen a este usuario (para motores que lo necesiten)
             List<String> userDatabases = null;
-            if (engineName.equals("postgres") && userExists) {
+            if (userExists) {
                 // Buscar el UserDb para obtener todas las instancias de este usuario
                 Optional<UserDb> userDb = userDbRepository.findByDbUser(dbUser);
                 if (userDb.isPresent()) {
@@ -370,9 +371,9 @@ public class InstanceService {
             }
 
             switch (engineName) {
-                case "mysql" -> createMySQL(conf, dbName, dbUser, dbPassword, userExists);
+                case "mysql" -> createMySQL(conf, dbName, dbUser, dbPassword, userExists, userDatabases);
                 case "postgres" -> createPostgres(conf, dbName, dbUser, dbPassword, userExists, userDatabases);
-                case "sqlserver" -> createSQLServer(conf, dbName, dbUser, dbPassword, userExists);
+                case "sqlserver" -> createSQLServer(conf, dbName, dbUser, dbPassword, userExists, userDatabases);
                 case "mongodb" -> createMongoDB(conf, dbName, dbUser, dbPassword);
                 case "cassandra" -> createCassandra(conf, dbName, dbUser, dbPassword);
                 case "redis" -> createRedis(conf, dbUser, dbPassword);
@@ -399,7 +400,7 @@ public class InstanceService {
 
 
 
-    private void createMySQL(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
+    private void createMySQL(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists, List<String> userDatabases) throws Exception {
         String url = "jdbc:mysql://" + conf.getHost() + ":" + conf.getPort() + "/?allowPublicKeyRetrieval=true&useSSL=false";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
@@ -419,11 +420,26 @@ public class InstanceService {
                 stmt.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM '" + dbUser + "'@'%'");
             }
 
-            // Otorgar solo permisos de DML (datos) sin DDL (estructura) A NIVEL DE BASE DE DATOS
+            // Otorgar permisos sobre la nueva base de datos
             // SELECT, INSERT, UPDATE, DELETE para trabajar con datos
             // CREATE, INDEX para crear tablas e índices dentro de la BD
             // Sin DROP, ALTER, RENAME para que no pueda eliminar ni modificar la estructura de la BD
             stmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, SHOW VIEW, CREATE VIEW ON " + dbName + ".* TO '" + dbUser + "'@'%'");
+
+            // Si el usuario ya existe, asegurar que tenga acceso a todas sus bases de datos anteriores
+            if (userExists && userDatabases != null && !userDatabases.isEmpty()) {
+                for (String existingDb : userDatabases) {
+                    if (!existingDb.equals(dbName)) { // No duplicar el GRANT de la BD recién creada
+                        try {
+                            // Re-otorgar permisos sobre bases de datos existentes (por si fueron revocados)
+                            stmt.execute("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, SHOW VIEW, CREATE VIEW ON " + existingDb + ".* TO '" + dbUser + "'@'%'");
+                        } catch (Exception e) {
+                            // Ignorar si la BD ya no existe o ya tiene el permiso
+                            log.warn("Could not grant permissions on existing database {}: {}", existingDb, e.getMessage());
+                        }
+                    }
+                }
+            }
 
             // Aplicar cambios
             stmt.execute("FLUSH PRIVILEGES");
@@ -587,13 +603,12 @@ public class InstanceService {
         }
     }
 
-    private void createSQLServer(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists) throws Exception {
+    private void createSQLServer(EngineDetails conf, String dbName, String dbUser, String dbPassword, boolean userExists, List<String> userDatabases) throws Exception {
         String url = "jdbc:sqlserver://" + conf.getHost() + ":" + conf.getPort() +
                 ";encrypt=true;trustServerCertificate=true";
         try (Connection conn = DriverManager.getConnection(url, conf.getRootUser(), conf.getRootPassword());
              Statement stmt = conn.createStatement()) {
 
-            System.out.printf(url);
             // Crear login solo si no existe y si el usuario no existe previamente
             if (!userExists) {
                 stmt.execute(String.format(
@@ -669,6 +684,62 @@ public class InstanceService {
 
             // Denegar permisos para eliminar o modificar la base de datos
             dbStmt.execute(String.format("DENY ALTER ON DATABASE::[%s] TO [%s]", dbName, dbUser));
+        }
+
+        // Si el usuario ya existe, asegurar que tenga acceso a todas sus bases de datos anteriores
+        if (userExists && userDatabases != null && !userDatabases.isEmpty()) {
+            for (String existingDb : userDatabases) {
+                if (!existingDb.equals(dbName)) { // No duplicar en la BD recién creada
+                    try {
+                        String existingDbUrl = "jdbc:sqlserver://" + conf.getHost() + ":" + conf.getPort() +
+                                ";databaseName=" + existingDb + ";encrypt=true;trustServerCertificate=true";
+                        try (Connection existingDbConn = DriverManager.getConnection(existingDbUrl, conf.getRootUser(), conf.getRootPassword());
+                             Statement existingDbStmt = existingDbConn.createStatement()) {
+
+                            // Crear usuario dentro de la base de datos existente si no existe
+                            existingDbStmt.execute(String.format(
+                                    "IF NOT EXISTS (SELECT name FROM sys.database_principals WHERE name = '%s') " +
+                                    "BEGIN CREATE USER [%s] FOR LOGIN [%s]; END",
+                                    dbUser, dbUser, dbUser
+                            ));
+
+                            // Re-asignar roles (por si fueron revocados)
+                            existingDbStmt.execute(String.format(
+                                    "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
+                                    "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
+                                    "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
+                                    "WHERE u.name = '%s' AND r.name = 'db_datareader') " +
+                                    "BEGIN ALTER ROLE db_datareader ADD MEMBER [%s]; END",
+                                    dbUser, dbUser
+                            ));
+
+                            existingDbStmt.execute(String.format(
+                                    "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
+                                    "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
+                                    "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
+                                    "WHERE u.name = '%s' AND r.name = 'db_datawriter') " +
+                                    "BEGIN ALTER ROLE db_datawriter ADD MEMBER [%s]; END",
+                                    dbUser, dbUser
+                            ));
+
+                            existingDbStmt.execute(String.format(
+                                    "IF NOT EXISTS (SELECT 1 FROM sys.database_role_members rm " +
+                                    "JOIN sys.database_principals u ON rm.member_principal_id = u.principal_id " +
+                                    "JOIN sys.database_principals r ON rm.role_principal_id = r.principal_id " +
+                                    "WHERE u.name = '%s' AND r.name = 'db_ddladmin') " +
+                                    "BEGIN ALTER ROLE db_ddladmin ADD MEMBER [%s]; END",
+                                    dbUser, dbUser
+                            ));
+
+                            existingDbStmt.execute(String.format("GRANT VIEW DEFINITION ON DATABASE::[%s] TO [%s]", existingDb, dbUser));
+                            existingDbStmt.execute(String.format("DENY ALTER ON DATABASE::[%s] TO [%s]", existingDb, dbUser));
+                        }
+                    } catch (Exception e) {
+                        // Ignorar si la BD ya no existe o hay problemas
+                        log.warn("Could not grant permissions on existing database {}: {}", existingDb, e.getMessage());
+                    }
+                }
+            }
         }
     }
 
@@ -895,6 +966,63 @@ public class InstanceService {
         }
     }
 
+    // TODO: Get statistics - databases created today
+    public ResponseEntity<DatabaseStatsResponse> getDatabasesCreatedToday() {
+        try {
+            LocalDate today = LocalDate.now();
+            LocalDateTime startOfDay = today.atStartOfDay();
+            LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
+
+            Long count = instanceRepository.countByCreatedAtBetween(startOfDay, endOfDay);
+
+            DatabaseStatsResponse response = DatabaseStatsResponse.builder()
+                    .date(today)
+                    .count(count)
+                    .build();
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error getting databases created today: {}", e.getMessage(), e);
+            throw new DatabaseOperationException("Failed to retrieve today's database statistics: " + e.getMessage());
+        }
+    }
+
+    // TODO: Get statistics - total databases
+    public ResponseEntity<DatabaseStatsResponse> getTotalDatabases() {
+        try {
+            Long totalCount = instanceRepository.countTotal();
+            LocalDate today = LocalDate.now();
+
+            DatabaseStatsResponse response = DatabaseStatsResponse.builder()
+                    .date(today)
+                    .count(totalCount)
+                    .build();
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error getting total databases: {}", e.getMessage(), e);
+            throw new DatabaseOperationException("Failed to retrieve total database statistics: " + e.getMessage());
+        }
+    }
+
+    // TODO: Get statistics - databases by engine
+    public ResponseEntity<List<DatabaseStatsByEngineResponse>> getDatabasesByEngine() {
+        try {
+            List<Object[]> results = instanceRepository.countByEngine();
+
+            List<DatabaseStatsByEngineResponse> responses = results.stream()
+                    .map(result -> DatabaseStatsByEngineResponse.builder()
+                            .engineName((String) result[0])
+                            .count((Long) result[1])
+                            .build())
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            log.error("Error getting databases by engine: {}", e.getMessage(), e);
+            throw new DatabaseOperationException("Failed to retrieve database statistics by engine: " + e.getMessage());
+        }
+    }
 
 }
 
