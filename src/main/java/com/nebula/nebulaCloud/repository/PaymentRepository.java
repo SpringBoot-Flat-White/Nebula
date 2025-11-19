@@ -35,4 +35,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      * Usado para expirar pagos pendientes antiguos.
      */
     List<Payment> findByStatusAndCreatedAtBefore(Payment.Status status, LocalDateTime createdAt);
+
+    /**
+     * Busca pagos por usuario y estado.
+     */
+    List<Payment> findByUserAndStatus(User user, Payment.Status status);
 }

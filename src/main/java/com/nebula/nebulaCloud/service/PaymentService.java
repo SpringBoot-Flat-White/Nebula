@@ -53,6 +53,20 @@ public class PaymentService {
                 throw new RuntimeException("Cannot change to a free plan through payment");
             }
 
+            // Cancel any existing PENDING payments for this user to avoid multiple pending payments
+            java.util.List<com.nebula.nebulaCloud.model.Payment> pendingPayments = 
+                    paymentRepository.findByUserAndStatus(user, com.nebula.nebulaCloud.model.Payment.Status.PENDING);
+            
+            if (!pendingPayments.isEmpty()) {
+                log.info("Found {} pending payments for user {}. Marking them as FAILED before creating new payment.", 
+                        pendingPayments.size(), userId);
+                
+                for (com.nebula.nebulaCloud.model.Payment pendingPayment : pendingPayments) {
+                    pendingPayment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.FAILED);
+                }
+                paymentRepository.saveAll(pendingPayments);
+            }
+
             // 4. Create payment preference in Mercado Pago
             String payerEmail = request.getPayerEmail() != null ? 
                     request.getPayerEmail() : user.getEmail();
@@ -228,5 +242,27 @@ public class PaymentService {
                         .build())
                 .sorted((t1, t2) -> t2.getCreatedAt().compareTo(t1.getCreatedAt())) // Most recent first
                 .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Cancels a pending payment.
+     * 
+     * @param userId User ID.
+     * @param preferenceId Mercado Pago Preference ID (transactionId).
+     */
+    @Transactional
+    public void cancelPayment(Long userId, String preferenceId) {
+        com.nebula.nebulaCloud.model.Payment payment = paymentRepository.findByTransactionId(preferenceId)
+                .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        if (!payment.getUser().getId().equals(userId)) {
+            throw new RuntimeException("Unauthorized to cancel this payment");
+        }
+        
+        if (payment.getStatus() == com.nebula.nebulaCloud.model.Payment.Status.PENDING) {
+            payment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.FAILED);
+            paymentRepository.save(payment);
+            log.info("Payment {} cancelled by user {}", payment.getId(), userId);
+        }
     }
 }

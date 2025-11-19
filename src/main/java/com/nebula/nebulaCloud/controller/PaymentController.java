@@ -124,4 +124,22 @@ public class PaymentController {
 
         return ResponseEntity.ok(transactions);
     }
+
+    /**
+     * Cancels a pending payment.
+     * 
+     * @param preferenceId Mercado Pago Preference ID.
+     * @param authentication Authenticated user data.
+     * @return HTTP 200 OK.
+     */
+    @PostMapping("/cancel")
+    @Operation(summary = "Cancel payment", description = "Marks a pending payment as failed/cancelled")
+    public ResponseEntity<Void> cancelPayment(
+            @RequestParam String preferenceId,
+            Authentication authentication
+    ) {
+        User user = (User) authentication.getPrincipal();
+        paymentService.cancelPayment(user.getId(), preferenceId);
+        return ResponseEntity.ok().build();
+    }
 }
