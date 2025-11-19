@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableConfigurationProperties(EngineConfig.class)
 @EnableScheduling
+@org.springframework.scheduling.annotation.EnableAsync
 public class NebulaCloudApplication {
 
 	public static void main(String[] args) {
