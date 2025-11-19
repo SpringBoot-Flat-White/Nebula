@@ -1,4 +1,4 @@
-  GNU nano 7.2                                           Dockerfile                                                     # Etapa 1: build con Maven + JDK 21
+# Etapa 1: build con Maven + JDK 21
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /Nebula
 
