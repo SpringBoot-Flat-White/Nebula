@@ -2,12 +2,14 @@ package com.nebula.nebulaCloud.controller;
 
 import com.nebula.nebulaCloud.dto.PaymentRequest;
 import com.nebula.nebulaCloud.dto.PaymentResponse;
+import com.nebula.nebulaCloud.dto.TransactionResponse;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -112,14 +114,14 @@ public class PaymentController {
     @GetMapping("/transactions")
     @Operation(summary = "Get user transaction history",
             description = "Retrieves all transactions/payments for the authenticated user")
-    public ResponseEntity<java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse>> getTransactions(
+    public ResponseEntity<List<TransactionResponse>> getTransactions(
             Authentication authentication
     ) {
         // Get the user from the principal
         User user = (User) authentication.getPrincipal();
         
         // Get transaction history
-        java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse> transactions = 
+        List<TransactionResponse> transactions = 
                 paymentService.getTransactionHistory(user.getId());
 
         return ResponseEntity.ok(transactions);

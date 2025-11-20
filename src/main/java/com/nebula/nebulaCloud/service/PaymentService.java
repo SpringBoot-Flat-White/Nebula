@@ -2,6 +2,8 @@ package com.nebula.nebulaCloud.service;
 
 import com.nebula.nebulaCloud.dto.PaymentRequest;
 import com.nebula.nebulaCloud.dto.PaymentResponse;
+import com.nebula.nebulaCloud.dto.TransactionResponse;
+import com.nebula.nebulaCloud.model.Payment;
 import com.nebula.nebulaCloud.model.Plan;
 import com.nebula.nebulaCloud.model.User;
 import com.nebula.nebulaCloud.repository.PaymentRepository;
@@ -13,7 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Domain service for managing payments and plan changes.
@@ -54,15 +59,15 @@ public class PaymentService {
             }
 
             // Cancel any existing PENDING payments for this user to avoid multiple pending payments
-            java.util.List<com.nebula.nebulaCloud.model.Payment> pendingPayments = 
-                    paymentRepository.findByUserAndStatus(user, com.nebula.nebulaCloud.model.Payment.Status.PENDING);
+            List<Payment> pendingPayments = 
+                    paymentRepository.findByUserAndStatus(user, Payment.Status.PENDING);
             
             if (!pendingPayments.isEmpty()) {
                 log.info("Found {} pending payments for user {}. Marking them as FAILED before creating new payment.", 
                         pendingPayments.size(), userId);
                 
-                for (com.nebula.nebulaCloud.model.Payment pendingPayment : pendingPayments) {
-                    pendingPayment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.FAILED);
+                for (Payment pendingPayment : pendingPayments) {
+                    pendingPayment.setStatus(Payment.Status.FAILED);
                 }
                 paymentRepository.saveAll(pendingPayments);
             }
@@ -75,11 +80,11 @@ public class PaymentService {
                     .createPaymentPreference(plan, payerEmail);
 
             // 5. Register payment attempt in DB with PENDING status
-            com.nebula.nebulaCloud.model.Payment payment = 
-                    com.nebula.nebulaCloud.model.Payment.builder()
+            Payment payment = 
+                    Payment.builder()
                     .user(user)
                     .plan(plan)
-                    .status(com.nebula.nebulaCloud.model.Payment.Status.PENDING)
+                    .status(Payment.Status.PENDING)
                     .transactionId(paymentResponse.getPreferenceId())
                     .mercadoPagoPaymentId(null)  // Will be set when webhook is received
                     .amount(plan.getPrice())
@@ -118,10 +123,10 @@ public class PaymentService {
                     paymentId, mpStatus, externalReference);
 
             // 2. Try to find payment by mercadoPagoPaymentId first (if already linked)
-            java.util.Optional<com.nebula.nebulaCloud.model.Payment> paymentOptional = 
+            Optional<Payment> paymentOptional = 
                     paymentRepository.findByMercadoPagoPaymentId(mpPaymentId);
             
-            com.nebula.nebulaCloud.model.Payment payment;
+            Payment payment;
             
             if (paymentOptional.isEmpty()) {
                 // Payment not yet linked, search by transactionId (preference ID)
@@ -129,10 +134,10 @@ public class PaymentService {
                 // Format is: USER_<email>_PLAN_<planId>
                 if (externalReference != null && externalReference.contains("PLAN_")) {
                     // This is a newly created payment, find by all pending payments and match
-                    java.util.List<com.nebula.nebulaCloud.model.Payment> pendingPayments = 
+                    List<Payment> pendingPayments = 
                             paymentRepository.findAll()
                                     .stream()
-                                    .filter(p -> p.getStatus() == com.nebula.nebulaCloud.model.Payment.Status.PENDING 
+                                    .filter(p -> p.getStatus() == Payment.Status.PENDING 
                                               && p.getMercadoPagoPaymentId() == null)
                                     .toList();
                     
@@ -168,7 +173,7 @@ public class PaymentService {
             // 4. Verify if payment was approved
             if (mercadoPagoService.isPaymentApproved(mpStatus)) {
                 // Payment was approved
-                payment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.APPROVED);
+                payment.setStatus(Payment.Status.APPROVED);
                 
                 // 5. Update user's plan
                 User user = payment.getUser();
@@ -192,7 +197,7 @@ public class PaymentService {
                         paymentId, user.getId(), payment.getPlan().getId());
             } else {
                 // Payment failed or pending
-                payment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.FAILED);
+                payment.setStatus(Payment.Status.FAILED);
                 log.warn("⚠️ PAYMENT NOT APPROVED - Payment ID: {} - Status from MP: {} - User: {}", 
                         paymentId, mpStatus, payment.getUser().getId());
             }
@@ -212,7 +217,7 @@ public class PaymentService {
      * @param userId User ID.
      * @return List of user's payments.
      */
-    public java.util.List<com.nebula.nebulaCloud.model.Payment> getPaymentHistory(Long userId) {
+    public List<Payment> getPaymentHistory(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return paymentRepository.findByUser(user);
@@ -224,14 +229,14 @@ public class PaymentService {
      * @param userId User ID.
      * @return List of transaction responses.
      */
-    public java.util.List<com.nebula.nebulaCloud.dto.TransactionResponse> getTransactionHistory(Long userId) {
+    public List<TransactionResponse> getTransactionHistory(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
-        java.util.List<com.nebula.nebulaCloud.model.Payment> payments = paymentRepository.findByUser(user);
+        List<Payment> payments = paymentRepository.findByUser(user);
         
         return payments.stream()
-                .map(payment -> com.nebula.nebulaCloud.dto.TransactionResponse.builder()
+                .map(payment -> TransactionResponse.builder()
                         .id(payment.getId())
                         .planName(payment.getPlan().getName())
                         .amount(payment.getAmount())
@@ -241,7 +246,7 @@ public class PaymentService {
                         .createdAt(payment.getCreatedAt())
                         .build())
                 .sorted((t1, t2) -> t2.getCreatedAt().compareTo(t1.getCreatedAt())) // Most recent first
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
     }
 
     /**
@@ -252,15 +257,15 @@ public class PaymentService {
      */
     @Transactional
     public void cancelPayment(Long userId, String preferenceId) {
-        com.nebula.nebulaCloud.model.Payment payment = paymentRepository.findByTransactionId(preferenceId)
+        Payment payment = paymentRepository.findByTransactionId(preferenceId)
                 .orElseThrow(() -> new RuntimeException("Payment not found"));
         
         if (!payment.getUser().getId().equals(userId)) {
             throw new RuntimeException("Unauthorized to cancel this payment");
         }
         
-        if (payment.getStatus() == com.nebula.nebulaCloud.model.Payment.Status.PENDING) {
-            payment.setStatus(com.nebula.nebulaCloud.model.Payment.Status.FAILED);
+        if (payment.getStatus() == Payment.Status.PENDING) {
+            payment.setStatus(Payment.Status.FAILED);
             paymentRepository.save(payment);
             log.info("Payment {} cancelled by user {}", payment.getId(), userId);
         }
